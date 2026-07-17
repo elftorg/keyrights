@@ -1,7 +1,7 @@
 <?php
 $requestPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $isApiRequest = is_string($requestPath)
-    && preg_match('#^/keyrights/(?:crypt|api|exchange|safari-enter-two)(?:/|$)#', $requestPath);
+    && preg_match('#^/keyrights/(?:crypt|api|exchange)(?:/|$)#', $requestPath);
 
 if ($isApiRequest) {
     define('STOP_STATISTICS', true);
@@ -13,6 +13,9 @@ if ($isApiRequest) {
 
     global $APPLICATION;
     $APPLICATION->SetShowIncludeAreas(false);
+    header('X-Content-Type-Options: nosniff');
+    header('X-Frame-Options: DENY');
+    header('Referrer-Policy: no-referrer');
 
     if (!\Bitrix\Main\Loader::includeModule('drdroid.keyrights') || !class_exists('CKeyrights')) {
         $APPLICATION->RestartBuffer();

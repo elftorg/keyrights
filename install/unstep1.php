@@ -1,9 +1,9 @@
 <?php IncludeModuleLangFile(__FILE__); ?>
-<form action="<?= $APPLICATION->GetCurPage()?>">
+<form action="<?= htmlspecialcharsbx($APPLICATION->GetCurPage()) ?>">
     <?= bitrix_sessid_post(); ?>
     <input type="hidden" name="step" value="2">
     <input type="hidden" name="id" value="drdroid.keyrights">
-    <input type="hidden" name="lang" value="<?= LANGUAGE_ID ?>">
+    <input type="hidden" name="lang" value="<?= htmlspecialcharsbx(LANGUAGE_ID) ?>">
     <input type="hidden" name="uninstall" value="Y">
 
     <?= CAdminMessage::ShowMessage(GetMessage("MOD_UNINST_WARN")) ?>

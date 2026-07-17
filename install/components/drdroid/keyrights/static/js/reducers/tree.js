@@ -40,12 +40,30 @@ const tree = (state = {sections: [], index: {}}, action = {type: ''}) => {
     switch (action.type) {
         case ActionTypes.END_FETCH_DATA:
             sections = action.sections.length ? action.sections : [];
+            treeIndex = _buildIndex(sections);
+            const allowed = sections.map(section => {
+                const parents = [];
+                const visited = {};
+                let parentId = section.SECTION;
+                while (parentId !== false && treeIndex[parentId] !== undefined && !visited[parentId]) {
+                    visited[parentId] = true;
+                    parents.push(parseInt(parentId));
+                    parentId = sections[treeIndex[parentId]].SECTION;
+                }
+                return extend({}, section, {
+                    RIGHTS: section.RIGHTS || [],
+                    ALL_PARENTS: parents,
+                    ALL_KIDS: []
+                });
+            }).sort(help.sortByNameAsc);
 
-            const allowed = help.getAllowedFolders(action.currentUser, sections, _buildIndex(sections), action.items).sort(help.sortByNameAsc);
+            sections = allowed.map(folder => extend({}, folder, {
+                ALL_KIDS: help.getItemKids(parseInt(folder.ID), allowed)
+            }));
 
             return {
-                sections: allowed,
-                index: _buildIndex(allowed),
+                sections,
+                index: _buildIndex(sections),
             };
 
         case ActionTypes.CHANGE_OWNER_START:

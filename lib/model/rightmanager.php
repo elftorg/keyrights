@@ -40,8 +40,8 @@ class RightManager {
             "IBLOCK_ID"         => $this->iblockId,
             "CREATED_BY"        => $userModel->getUserId(),
             "NAME"              => $params['NAME'],
-            "IBLOCK_SECTION_ID" => (int)$params['IBLOCK_SECTION_ID'],
-            "DESCRIPTION"       => $params['DESCRIPTION'],
+            "IBLOCK_SECTION_ID" => (int)($params['IBLOCK_SECTION_ID'] ?? $params['SECTION'] ?? 0),
+            "DESCRIPTION"       => (string)($params['DESCRIPTION'] ?? ''),
         ];
 
         return $this->ibs->Add($fields);
@@ -80,50 +80,103 @@ class RightManager {
         return $hierarchy;
     }
 
-    public function getSectionsTree($includeRoot = false) {
-        $sectionList = $this->getSection();
+    /**
+     * Return only folders visible to the selected subject. Ancestors required
+     * to render the tree are represented by anonymous placeholders. ACL rows
+     * are exposed only for folders the subject is allowed to administer.
+     */
+    public function getAccessibleSectionsTree($includeRoot = false, $forId = false, $isGroup = false) {
+        $sections = $this->getSection();
+        $hierarchy = [];
+        $byId = [];
+        foreach ($sections as $section) {
+            $id = (int)$section['ID'];
+            $byId[$id] = $section;
+            $hierarchy[$id] = [
+                'parent' => (int)$section['SECTION'],
+                'owner' => (int)$section['CREATED_BY'],
+            ];
+        }
 
-        $rightList = $this->getRightsList();
+        $userModel = new User();
+        $user = $userModel->getUserData($isGroup ? false : $forId);
+        if ($forId && $isGroup) {
+            $user = ['ID' => -1, 'admin' => false, 'UF_DEPARTMENT' => [(int)$forId]];
+        }
+        if (!$user) {
+            return [];
+        }
 
-        $rowRightsCache = [];
-        foreach ($rightList as $rowRight) {
-            if (!$rowRight['entity_id'] && $rowRight['section_id'] !== null) {
-                $rowRightsCache[$rowRight['section_id']] = $rowRight;
+        $rights = $this->getRightsList();
+        $passes = [];
+        foreach ($sections as $section) {
+            $passes[] = ['ID' => -((int)$section['ID'] + 1), 'SECTION' => (int)$section['ID']];
+        }
+        $checked = $this->doRecursiveCheckEntitiesRights($hierarchy, $rights, $user, $passes);
+        $levels = [];
+        foreach ($checked as $pass) {
+            $levels[(int)$pass['SECTION']] = (int)$pass['level'];
+        }
+
+        $included = [];
+        foreach (array_keys($levels) as $id) {
+            $included[$id] = true;
+            $visited = [];
+            $parent = isset($hierarchy[$id]) ? (int)$hierarchy[$id]['parent'] : 0;
+            while ($parent > 0 && isset($hierarchy[$parent]) && !isset($visited[$parent])) {
+                $visited[$parent] = true;
+                $included[$parent] = true;
+                $parent = (int)$hierarchy[$parent]['parent'];
             }
+        }
+
+        $preparedRights = $this->prepareRights($rights);
+        $result = [];
+        foreach ($sections as $section) {
+            $id = (int)$section['ID'];
+            if (!isset($included[$id])) {
+                continue;
+            }
+            if (!isset($levels[$id])) {
+                $result[] = [
+                    'ID' => $id,
+                    'SECTION' => (int)$section['SECTION'],
+                    'NAME' => '…',
+                    'DESCRIPTION' => '',
+                    'CREATED_BY' => 0,
+                    'OWNER' => 0,
+                    'RIGHTS' => [],
+                    'IS_PLACEHOLDER' => true,
+                ];
+                continue;
+            }
+
+            $level = $levels[$id];
+            $anchor = $preparedRights['section'][$id] ?? null;
+            $section['OWNER'] = $anchor ? (int)$anchor['owner'] : (int)$section['CREATED_BY'];
+            $section['RIGHTS'] = $level >= self::ACCESS_CAN_WRITE && $anchor ? $anchor['rights'] : [];
+            $section['CAN_READ'] = $level >= self::ACCESS_CAN_READ;
+            $section['CAN_WRITE'] = $level >= self::ACCESS_CAN_WRITE;
+            $section['CAN_OWN'] = $level >= self::ACCESS_CAN_OWN;
+            $result[] = $section;
         }
 
         if ($includeRoot) {
-            $root = [
+            $result[] = [
                 'ID' => 0,
                 'SECTION' => false,
                 'NAME' => 'Корневая папка',
-                'CREATED_BY' => 1,
-                'OWNER' => 1,
+                'CREATED_BY' => $user['admin'] ? 1 : 0,
+                'OWNER' => $user['admin'] ? 1 : 0,
                 'DESCRIPTION' => '',
+                'RIGHTS' => [],
+                'CAN_READ' => true,
+                'CAN_WRITE' => (bool)$user['admin'],
+                'CAN_OWN' => (bool)$user['admin'],
             ];
-
-            $sectionList[] = $root;
         }
 
-        foreach ($sectionList as &$section) {
-            $sectionId = (int)$section['ID'];
-            $sectionRight = isset($rowRightsCache[$sectionId]) ? $rowRightsCache[$sectionId] : null;
-            $owner = (int)$section['CREATED_BY'];
-
-            if (!$sectionRight) {
-                // Listing must remain read-only. The anchor is created by the
-                // POST rights/list action after access has been checked.
-                $section['RIGHTS'] = [];
-            } else {
-                $owner = (int)$sectionRight['owner'];
-                $section['RIGHTS'] = $sectionRight['rights'];
-            }
-
-            $section['OWNER'] = $owner;
-        }
-        unset($section);
-
-        return $sectionList;
+        return $result;
     }
 
     public function updateSection($params) {
@@ -182,8 +235,7 @@ class RightManager {
         $section = $res->Fetch();
 
         if ($section) {
-            $this->ibs->Delete($id);
-            return true;
+            return (bool)$this->ibs->Delete($id);
         }
 
         return false;
@@ -211,17 +263,6 @@ class RightManager {
     }
 
     public function getItem($params = []) {
-        if (isset($params['ENTITY']) && $params['ENTITY'] == 'keyrightsuser' && isset($params['NAME']) && $params['NAME'] == 'passPhrase') {
-            $key = Option::get('drdroid.keyrights', 'clientPassphrase', '');
-
-            return [
-                [
-                    'NAME' => 'passPhrase',
-                    'PREVIEW_TEXT' => $key
-                ]
-            ];
-        }
-
         $sort = !empty($params['SORT']) ? $params['SORT'] : ['ID' => 'ASC'];
         $filter = [
             'ACTIVE' => 'Y',
@@ -257,7 +298,6 @@ class RightManager {
                 $entity['CRYPTED'] = $cryptedText !== '' ? Crypt::decrypt($cryptedText) : '';
             } else {
                 // Permission checks need only IDs and sections. Do not
-                // decrypt records that will be discarded by access filtering.
                 $entity['CRYPTED'] = '';
             }
             
@@ -267,21 +307,6 @@ class RightManager {
         }
 
         return $result;
-    }
-
-    public function secureGetItem($params = []) {
-        if (isset($params['ENTITY']) && $params['ENTITY'] == 'keyrightsuser' && isset($params['NAME']) && $params['NAME'] == 'passPhrase') {
-            $key = Option::get('drdroid.keyrights', 'clientPassphrase', '');
-
-            return [
-                [
-                    'NAME' => 'passPhrase',
-                    'PREVIEW_TEXT' => $key
-                ]
-            ];
-        } else {
-            return [];
-        }
     }
 
     public function updateItem($params) {
@@ -429,18 +454,49 @@ class RightManager {
                 return '';
             }
 
-            if (preg_match('/^(?:a|s|i|b|d|N|O|C):/', $value)) {
-                $unserialized = @unserialize($value, ['allowed_classes' => false]);
-                if ($unserialized !== false || $value === 'b:0;') {
-                    $value = $unserialized;
-                    continue;
-                }
+            $legacyText = $this->extractLegacySerializedText($value);
+            if ($legacyText !== null) {
+                $value = $legacyText;
+                continue;
             }
 
             return $value;
         }
 
         return is_scalar($value) ? (string)$value : '';
+    }
+
+    /**
+     * Read only the string value of the TEXT field from a legacy serialized
+     * Bitrix HTML property. This deliberately does not invoke PHP's generic
+     * deserializer, instantiate objects, or interpret references and types.
+     */
+    private function extractLegacySerializedText($value) {
+        if (!is_string($value) || strlen($value) > 2097152) {
+            return null;
+        }
+        // A zero-width lookahead is intentional: TYPE => TEXT and the next
+        // TEXT key overlap in PHP's serialized representation.
+        if (!preg_match_all('/(?=((?:^|[;{])s:4:"TEXT";s:(\d+):"))/', $value, $matches, PREG_OFFSET_CAPTURE)) {
+            return null;
+        }
+
+        // A normal Bitrix HTML property also contains TYPE => TEXT before the
+        // actual TEXT field. Walk backwards so that value is not mistaken for
+        // the field we need.
+        for ($index = count($matches[1]) - 1; $index >= 0; $index--) {
+            $length = (int)$matches[2][$index][0];
+            if ($length < 0 || $length > 1048576) {
+                continue;
+            }
+            $start = $matches[1][$index][1] + strlen($matches[1][$index][0]);
+            $text = substr($value, $start, $length);
+            if (strlen($text) === $length && substr($value, $start + $length, 2) === '";') {
+                return $text;
+            }
+        }
+
+        return null;
     }
 
     // ----------------------------------------------------
@@ -559,37 +615,44 @@ class RightManager {
         }
     }
 
-    public function deleteSectionRights($sectionId) {
-        $sectionId = intval($sectionId);
-        
-        $sectionList = $this->getSectionHierarchy();
-        $toDelete = [$sectionId => $sectionId];
-        
+    public function getSectionSubtreeIds($sectionId) {
+        $sectionId = (int)$sectionId;
+        $hierarchy = $this->getSectionHierarchy();
+        $result = [$sectionId => $sectionId];
         do {
-            $added = [];
-            foreach ($sectionList as $id => $section) {
-                if (array_key_exists($id, $toDelete)) {
-                    continue;
-                }
-                if ($section['parent'] && array_key_exists($section['parent'], $toDelete)) {
-                    $added[$id] = $id;
+            $added = false;
+            foreach ($hierarchy as $id => $section) {
+                if (!isset($result[$id]) && isset($result[(int)$section['parent']])) {
+                    $result[$id] = (int)$id;
+                    $added = true;
                 }
             }
-            $toDelete += $added;
-        } while (!empty($added));
+        } while ($added);
+        return array_values($result);
+    }
 
+    public function deleteSectionRightsByIds(array $sectionIds, array $entityIds = []) {
+        $sectionIds = array_values(array_unique(array_filter(array_map('intval', $sectionIds))));
+        $entityIds = array_values(array_unique(array_filter(array_map('intval', $entityIds))));
+        if (empty($sectionIds) && empty($entityIds)) {
+            return true;
+        }
         $connection = Application::getConnection();
         $connection->startTransaction();
         try {
-            $res = ItemTable::getList([
-                'select' => ['ID'],
-                'filter' => ['@SECTION_ID' => array_map('intval', array_keys($toDelete))],
-            ]);
+            $filter = ['LOGIC' => 'OR'];
+            if (!empty($sectionIds)) $filter[] = ['@SECTION_ID' => $sectionIds];
+            if (!empty($entityIds)) $filter[] = ['@ENTITY_ID' => $entityIds];
+            $res = ItemTable::getList(['select' => ['ID'], 'filter' => $filter]);
             while ($row = $res->fetch()) {
                 $this->deleteRightsByItemId((int)$row['ID']);
-                ItemTable::delete((int)$row['ID']);
+                $result = ItemTable::delete((int)$row['ID']);
+                if (!$result->isSuccess()) {
+                    throw new \RuntimeException(implode('; ', $result->getErrorMessages()));
+                }
             }
             $connection->commitTransaction();
+            return true;
         } catch (\Throwable $e) {
             $connection->rollbackTransaction();
             throw $e;
@@ -598,7 +661,12 @@ class RightManager {
 
     public function checkRightsLevel($passData) {
         $result = $this->checkEntitiesRights($passData);
-        return !empty($result) ? $result[0]['level'] : self::ACCESS_NO;
+        if (count($result) !== count($passData) || empty($result)) {
+            return self::ACCESS_NO;
+        }
+        return min(array_map(function ($item) {
+            return (int)$item['level'];
+        }, $result));
     }
 
     public function checkEntitiesRights($passData, $forId = false, $isGroup = false) {
@@ -613,13 +681,13 @@ class RightManager {
                 'UF_DEPARTMENT' => [(int)$forId]
             ];
         }
-        return $this->_doRecursiveCheckEntitiesRights($sectionTree, $itemList, $user, $passData);
+        return $this->doRecursiveCheckEntitiesRights($sectionTree, $itemList, $user, $passData);
     }
 
-    public function _doRecursiveCheckEntitiesRights($sectionsTree, $rights, $user, $passData) {
+    public function doRecursiveCheckEntitiesRights($sectionsTree, $rights, $user, $passData) {
         $filteredData = [];
         if (!$user) return $filteredData;
-        $prepared = $this->_prepareRights($rights);
+        $prepared = $this->prepareRights($rights);
 
         foreach ($passData as $i => $pass) {
             $hasAccess = false;
@@ -630,7 +698,7 @@ class RightManager {
 
             // Проверка прав конкретно на этот пароль
             if (($hasAccess === false) && isset($prepared['item'][$pass['ID']])) {
-                $hasAccess = $this->_checkOneRight($prepared['item'][$pass['ID']], $user);
+                $hasAccess = $this->checkOneRight($prepared['item'][$pass['ID']], $user);
             }
 
             // Рекурсивно на папку
@@ -638,7 +706,7 @@ class RightManager {
                 $currentSectionId = (int)$pass['SECTION'];
                 while ($currentSectionId > 0) {
                     if (isset($prepared['section'][$currentSectionId])) {
-                        $hasAccess = $this->_checkOneRight($prepared['section'][$currentSectionId], $user);
+                        $hasAccess = $this->checkOneRight($prepared['section'][$currentSectionId], $user);
                         if ($hasAccess !== false) break;
                     }
 
@@ -658,53 +726,55 @@ class RightManager {
         return $filteredData;
     }
 
-    protected function _checkOneRight($right, $user) {
-        if ($right['owner'] == $user['ID']) return self::ACCESS_CAN_OWN;
+    protected function checkOneRight($right, $user) {
+        $userId = (int)$user['ID'];
+        if ((int)$right['owner'] === $userId) return self::ACCESS_CAN_OWN;
         $rights = $right['rights'];
         if (empty($rights)) return false;
 
-        // right to user
+        // Explicit deny wins among duplicate legacy rows. New writes reject
+        // duplicates, but old installations may still contain them.
+        $userLevel = false;
         foreach ($rights as $oneRight) {
             if (!$oneRight['user']) continue;
-            if (!$this->_checkRightTime($oneRight['timed'])) continue;
+            if (!$this->checkRightTime($oneRight['timed'])) continue;
 
-            if ($oneRight['user'] == $user['ID']) {
+            if ((int)$oneRight['user'] === $userId) {
                 if ($oneRight['blocked']) return self::ACCESS_NO;
-                return ($oneRight['edit'] ? self::ACCESS_CAN_WRITE : self::ACCESS_CAN_READ);
+                $level = $oneRight['edit'] ? self::ACCESS_CAN_WRITE : self::ACCESS_CAN_READ;
+                $userLevel = $userLevel === false ? $level : max($userLevel, $level);
             }
         }
+        if ($userLevel !== false) return $userLevel;
 
         // right to group
-        $currentRight = $rightByGroup = false;
+        $rightByGroup = false;
+        $departmentIds = array_map('intval', (array)($user['UF_DEPARTMENT'] ?? []));
         foreach ($rights as $oneRight) {
             if (!$oneRight['group']) {
                 continue;
             }
 
-            if (!$this->_checkRightTime($oneRight['timed'])) {
+            if (!$this->checkRightTime($oneRight['timed'])) {
                 continue;
             }
 
-            $group = $oneRight['group'];
+            $group = (int)$oneRight['group'];
 
             // Если разрешено хоть одной группе, в которой состоит пользователь
-            if (in_array($group, $user['UF_DEPARTMENT'])) {
+            if (in_array($group, $departmentIds, true)) {
                 if ($oneRight['blocked']) {
-                    $currentRight = self::ACCESS_NO;
-                } else {
-                    $currentRight = ($oneRight['edit'] ? self::ACCESS_CAN_WRITE : self::ACCESS_CAN_READ);
+                    return self::ACCESS_NO;
                 }
-            }
-
-            if (($rightByGroup === false) || ($currentRight > $rightByGroup)) {
-                $rightByGroup = $currentRight;
+                $currentRight = $oneRight['edit'] ? self::ACCESS_CAN_WRITE : self::ACCESS_CAN_READ;
+                $rightByGroup = $rightByGroup === false ? $currentRight : max($rightByGroup, $currentRight);
             }
         }
 
         return $rightByGroup;
     }
 
-    protected function _prepareRights($rights) {
+    protected function prepareRights($rights) {
         $prepared = [
             'section' => [],
             'item' => [],
@@ -721,7 +791,7 @@ class RightManager {
         return $prepared;
     }
 
-    protected function _checkRightTime($time) {
+    protected function checkRightTime($time) {
         if (!$time) {
             return true;
         }
@@ -763,9 +833,7 @@ class RightManager {
         }
         $itemId = $item['id'];
 
-        if (!is_array($rights) || count($rights) > 500) {
-            return false;
-        }
+        $rights = $this->validateRights($rights);
 
         $connection = Application::getConnection();
         $connection->startTransaction();
@@ -778,7 +846,7 @@ class RightManager {
                 }
                 $timed = null;
                 if (!empty($newRight['timed'])) {
-                    $timed = new \Bitrix\Main\Type\DateTime((string)$newRight['timed']);
+                    $timed = \Bitrix\Main\Type\DateTime::createFromTimestamp((int)$newRight['timed']);
                 }
                 $result = RightTable::add([
                     'ITEM_ID' => (int)$itemId,
@@ -799,6 +867,97 @@ class RightManager {
             $connection->rollbackTransaction();
             throw $e;
         }
+    }
+
+    public function currentUserCanManageRights() {
+        return $this->currentUserHasAccess(self::ACCESS_CAN_WRITE);
+    }
+
+    public function currentUserCanUseVault() {
+        return $this->currentUserHasAccess(self::ACCESS_CAN_READ);
+    }
+
+    private function currentUserHasAccess($minimumLevel) {
+        $userModel = new User();
+        if ($userModel->isAdmin()) {
+            return true;
+        }
+        $passes = [];
+        foreach ($this->getSection() as $section) {
+            $passes[] = ['ID' => -((int)$section['ID'] + 1), 'SECTION' => (int)$section['ID']];
+        }
+        foreach ($this->getItem(['DECRYPT' => false]) as $item) {
+            $passes[] = $item;
+        }
+        foreach ($this->checkEntitiesRights($passes) as $checked) {
+            if ((int)$checked['level'] >= (int)$minimumLevel) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private function validateRights($rights) {
+        if (!is_array($rights) || count($rights) > 500) {
+            throw new \InvalidArgumentException('Invalid rights collection');
+        }
+
+        $users = [];
+        $groups = [];
+        $seen = [];
+        $validated = [];
+        foreach ($rights as $row) {
+            if (!is_array($row)) {
+                throw new \InvalidArgumentException('Invalid right row');
+            }
+            $userId = (int)($row['user'] ?? 0);
+            $groupId = (int)($row['group'] ?? 0);
+            if (($userId > 0) === ($groupId > 0)) {
+                throw new \InvalidArgumentException('A right must contain exactly one subject');
+            }
+            $subject = $userId > 0 ? 'u:' . $userId : 'g:' . $groupId;
+            if (isset($seen[$subject])) {
+                throw new \InvalidArgumentException('Duplicate right subject');
+            }
+            $seen[$subject] = true;
+            if ($userId > 0) $users[$userId] = $userId;
+            if ($groupId > 0) $groups[$groupId] = $groupId;
+
+            $timestamp = null;
+            if (!empty($row['timed'])) {
+                $timestamp = strtotime((string)$row['timed']);
+                if ($timestamp === false || $timestamp <= time()) {
+                    throw new \InvalidArgumentException('Invalid right expiration time');
+                }
+            }
+            $validated[] = [
+                'edit' => !empty($row['edit']) ? 1 : 0,
+                'blocked' => !empty($row['blocked']) ? 1 : 0,
+                'timed' => $timestamp,
+                'user' => $userId > 0 ? $userId : null,
+                'group' => $groupId > 0 ? $groupId : null,
+            ];
+        }
+
+        $knownUsers = User::getUserListById(array_values($users));
+        foreach ($users as $id) {
+            if (!isset($knownUsers[$id]) || ($knownUsers[$id]['ACTIVE'] ?? 'N') !== 'Y') {
+                throw new \InvalidArgumentException('Unknown or inactive user');
+            }
+        }
+        if (!empty($groups)) {
+            $knownGroups = [];
+            foreach ((new User())->getDepartments() as $department) {
+                $knownGroups[(int)$department['ID']] = true;
+            }
+            foreach ($groups as $id) {
+                if (!isset($knownGroups[$id])) {
+                    throw new \InvalidArgumentException('Unknown department');
+                }
+            }
+        }
+
+        return $validated;
     }
 
     public function deleteAll($elements = []) {

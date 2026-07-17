@@ -9,7 +9,7 @@ $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_HEADER'] = 'Переконайтеся, щ
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
     '<li>База даних MySQL/MariaDB або PostgreSQL, що підтримується Бітрікс</li>' .
     '<li>Коробковий Бітрікс24 версії 20.5.400 або новішої</li>' .
-    '<li>PHP 8.2 або новіший із розширеннями OpenSSL і cURL</li>' .
+    '<li>PHP 8.2 або новіший із розширенням OpenSSL</li>' .
     '<li>Встановлено модуль «Інформаційні блоки»</li>' .
     '<li>Файл urlrewrite.php доступний для запису</li>';
 $MESS['KEYRIGHTS_HEADER_STEP1'] = 'Параметри встановлення';
@@ -20,12 +20,13 @@ $MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights потребує базу д
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Потрібен Бітрікс версії 20.5.400 або новішої';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_PHP'] = 'Потрібен PHP 8.2 або новіший';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_OPENSSL'] = 'Не встановлено розширення PHP OpenSSL';
-$MESS['KEYRIGHTS_INSTALL_REQERROR_CURL'] = 'Не встановлено розширення PHP cURL';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_IBLOCK'] = 'Модуль «Інформаційні блоки» не встановлено';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_REWRITE'] = 'Немає прав на запис у файл urlrewrite.php';
+$MESS['KEYRIGHTS_INSTALL_LEGACY_TABLES_INCOMPLETE'] = 'Виявлено неповний набір старих таблиць KeyRights. Для безпечної міграції потрібні обидві таблиці: sib_kr_item та sib_kr_right';
+$MESS['KEYRIGHTS_INSTALL_LEGACY_MIGRATION_ERROR'] = 'Не вдалося перенести дані зі старих таблиць KeyRights';
 $MESS['KEYRIGHTS_INSTALL_PASS_LABEL'] = 'Введіть ключову фразу для шифрування паролів: ';
 $MESS['KEYRIGHTS_INSTALL_PASS_ALREADY_EXISTS_REWRITE'] = 'Клієнтський пароль уже заданий. Залиште поле порожнім, щоб зберегти його.';
-$MESS['KEYRIGHTS_INSTALL_PASS_EMPTY'] = 'Введіть фразу для шифрування';
+$MESS['KEYRIGHTS_INSTALL_PASS_EMPTY'] = 'Ключова фраза має містити щонайменше 16 символів';
 $MESS['KEYRIGHTS_INSTALL_BUTTON_INSTALL'] = 'Встановити';
 $MESS['KEYRIGHTS_UNINSTALL'] = 'Видалення KeyRights';
 $MESS['KEYRIGHTS_UNINSTALL_SAVE_TABLES'] = 'Зберегти таблиці бази даних';

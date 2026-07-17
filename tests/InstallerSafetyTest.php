@@ -4,8 +4,9 @@ $install = file_get_contents(__DIR__ . '/../install/index.php');
 $form = file_get_contents(__DIR__ . '/../install/unstep1.php');
 $step = file_get_contents(__DIR__ . '/../install/step1.php');
 $pgsqlSchema = file_get_contents(__DIR__ . '/../install/db/pgsql/install.sql');
+$apiController = file_get_contents(__DIR__ . '/../lib/controller/apicontroller.php');
 
-if ($install === false || $form === false || $step === false || $pgsqlSchema === false) {
+if ($install === false || $form === false || $step === false || $pgsqlSchema === false || $apiController === false) {
     fwrite(STDERR, "FAIL: installer files are not readable\n");
     exit(1);
 }
@@ -19,8 +20,24 @@ $checks = [
     strpos($install, '$GLOBALS["reqCheck"] = is_array($reqCheck)') !== false,
     strpos($step, "is_array(\$reqCheck)") !== false,
     strpos($install, 'in_array($dbType, array("mysql", "pgsql"), true)') !== false,
+    strpos($install, "'curl'") === false,
+    strpos($apiController, 'api/favicon') === false,
+    strpos($apiController, 'curl_init') === false,
     strpos($install, 'TableExists') !== false,
-    strpos($pgsqlSchema, 'CREATE TABLE IF NOT EXISTS sib_kr_item') !== false,
+    strpos($install, 'migrateLegacyDatabase') !== false,
+    strpos($install, 'sib_kr_item') !== false,
+    strpos($install, 'sib_kr_right') !== false,
+    strpos($install, 'DROP TABLE IF EXISTS') !== false,
+    strpos($install, 'DROP TABLE IF EXISTS "sib_kr_') === false,
+    strpos($step, 'jquery-3.7.1.min.js') !== false,
+    strpos($step, 'ajax.googleapis.com') === false,
+    strpos($install, 'clientPassphraseEncrypted') !== false,
+    strpos($install, 'serverPassphraseEncrypted') !== false,
+    strpos($install, 'protectSecret') !== false,
+    strpos($install, 'upgradeStoredSecrets') !== false,
+    strpos($install, 'bin2hex(random_bytes(32))') !== false,
+    strpos($install, "RemoveOption(\$this->MODULE_ID, \$name)") !== false,
+    strpos($pgsqlSchema, 'CREATE TABLE IF NOT EXISTS dr_kr_item') !== false,
     strpos($pgsqlSchema, '"group"') !== false,
 ];
 

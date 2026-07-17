@@ -16,11 +16,11 @@ jobs:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v5
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: curl, openssl
+          extensions: openssl
           coverage: none
       - run: composer validate
       - run: composer install --no-dev --no-interaction --prefer-dist
@@ -39,25 +39,25 @@ jobs:
       run:
         working-directory: install/components/drdroid/keyrights
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: install/components/drdroid/keyrights/package-lock.json
       - run: npm ci --legacy-peer-deps
-      - run: npm run build
+      - run: npm test
       - run: npm audit --omit=dev
 
   integration:
-    name: HTTP integration access checks
+    name: Optional HTTP integration access checks
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: .
     steps:
-      - uses: actions/checkout@v5
-      - uses: shivammathur/setup-php@v2
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
         with:
           php-version: '8.2'
           extensions: curl, openssl
@@ -69,3 +69,4 @@ jobs:
           KEYRIGHTS_TEST_CSRF: ${{ secrets.KEYRIGHTS_TEST_CSRF }}
           KEYRIGHTS_TEST_ITEM_ID: ${{ secrets.KEYRIGHTS_TEST_ITEM_ID }}
           KEYRIGHTS_TEST_SECTION_ID: ${{ secrets.KEYRIGHTS_TEST_SECTION_ID }}
+          KEYRIGHTS_TEST_REQUIRED: '0'

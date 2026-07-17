@@ -135,6 +135,7 @@ return array_replace($messages, [
     'HISTORY' => 'User activity report',
     'GET_HISTORY' => 'Generate user activity report',
     'HISTORY_START' => 'Generate report',
+    'HISTORY_SECURITY_WARNING' => 'This report contains user activity information. Store the CSV securely and do not share it with unauthorized people.',
     'VIEW_USER' => 'View as user or group',
     'UNVIEW_USER' => 'Stop viewing as user',
     'REMOVE_RIGHTS' => 'Revoke permissions',

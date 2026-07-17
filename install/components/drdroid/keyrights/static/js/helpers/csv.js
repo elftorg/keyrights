@@ -1,5 +1,10 @@
 const escapeCell = value => {
-    const text = value === null || typeof value === 'undefined' ? '' : String(value);
+    let text = value === null || typeof value === 'undefined' ? '' : String(value);
+    // Spreadsheet applications execute cells beginning with these characters
+    // as formulas. Prefixing an apostrophe keeps exported secrets as text.
+    if (/^[\s]*[=+\-@]/.test(text)) {
+        text = "'" + text;
+    }
     return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 };
 

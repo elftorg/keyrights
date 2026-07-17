@@ -2,7 +2,7 @@
   "name": "drdroid/keyrights",
   "description": "Bitrix24 KeyRights module",
   "type": "bitrix-module",
-  "version": "2.0.1",
+  "version": "2.1.3",
   "license": "MIT",
   "homepage": "https://github.com/elftorg/keyrights/",
   "support": {
@@ -13,7 +13,7 @@
     "phpseclib/phpseclib": "^3.0.55"
   },
   "scripts": {
-    "test": "php tests/AccessPolicyTest.php && php tests/InstallerSafetyTest.php"
+    "test": "php tests/AccessPolicyTest.php && php tests/InstallerSafetyTest.php && php tests/SecurityContractTest.php && php tests/LegacyPropertyTest.php"
   },
   "config": {
     "sort-packages": true,

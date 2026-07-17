@@ -3,6 +3,10 @@ const request = require('superagent');
 require('es6-promise').polyfill();
 
 const DEFAULT_ERROR = 'Не удалось выполнить запрос к KeyRights';
+const csrfToken = window.CONST && window.CONST.csrfToken ? window.CONST.csrfToken : '';
+if (window.CONST) {
+    delete window.CONST.csrfToken;
+}
 
 const getBaseUrl = () => {
     const configured = window.CONST && window.CONST.baseUrl
@@ -50,7 +54,7 @@ const parsePayload = (error, response) => {
 
 const call = (method, path, data) => new Promise((resolve, reject) => {
     const endpoint = getEndpoint(path);
-    const query = {csrf_token: window.csrfToken || ''};
+    const query = {csrf_token: csrfToken};
 
     if (endpoint.action) {
         query.action = endpoint.action;

@@ -13,7 +13,6 @@ use Drdroid\Keyrights\Security\AccessPolicy;
 
 class ApiController extends Controller {
     private $isWin1251 = false;
-    private $faviconResolve = [];
 
     private const WRITE_ACTIONS = [
         'crypt/section/save',
@@ -43,13 +42,13 @@ class ApiController extends Controller {
         return [
             'read' => [
                 'prefilters' => [
-                    new Authentication(false),
+                    new Authentication(),
                     new HttpMethod([HttpMethod::METHOD_GET, HttpMethod::METHOD_POST]),
                 ],
             ],
             'write' => [
                 'prefilters' => [
-                    new Authentication(false),
+                    new Authentication(),
                     new HttpMethod([HttpMethod::METHOD_POST]),
                     new Csrf(true, 'csrf_token', false),
                 ],
@@ -76,14 +75,24 @@ class ApiController extends Controller {
     }
 
     public function readAction($route) {
-        $this->route((string)$route);
+        $this->executeRoute((string)$route);
     }
 
     public function writeAction($route) {
-        $this->route((string)$route);
+        $this->executeRoute((string)$route);
+    }
+
+    private function executeRoute($route) {
+        try {
+            $this->route($route);
+        } catch (\Throwable $exception) {
+            AddMessage2Log($exception->getMessage(), 'drdroid.keyrights');
+            $this->sendJsonError('Внутренняя ошибка KeyRights', 500);
+        }
     }
 
     private function route($action) {
+        $this->enforceRateLimit($action);
         switch ($action) {
             case 'crypt/section/list':
                 $this->sectionListAction();
@@ -130,9 +139,6 @@ class ApiController extends Controller {
             case 'api/user':
                 $this->userAction();
                 break;
-            case 'api/favicon':
-                $this->faviconAction();
-                break;
             case 'api/request-access':
                 $this->requestAccessAction();
                 break;
@@ -148,19 +154,60 @@ class ApiController extends Controller {
             case 'exchange/crypto-migrate':
                 $this->cryptoMigrateAction();
                 break;
-            case 'safari-enter-two':
-                $this->enterTwoAction();
-                break;
+
             default:
                 $this->sendJsonError('Action not found', 404);
         }
     }
 
+    private function enforceRateLimit($action) {
+        global $USER;
+        $userId = is_object($USER) ? (int)$USER->GetID() : 0;
+        if ($userId <= 0) {
+            return;
+        }
+        $limit = in_array($action, self::WRITE_ACTIONS, true) ? 60 : 180;
+        if ($action === 'exchange/crypto-migrate') $limit = 5;
+        if ($action === 'exchange/import') $limit = 10;
+
+        $bucket = (int)floor(time() / 60);
+        $cacheId = 'api-' . hash('sha256', $userId . '|' . $action . '|' . $bucket);
+        $cacheDir = '/drdroid.keyrights/rate-limit';
+        $cache = \Bitrix\Main\Data\Cache::createInstance();
+        $count = 0;
+        if ($cache->initCache(70, $cacheId, $cacheDir)) {
+            $count = (int)$cache->getVars();
+            $cache->clean($cacheId, $cacheDir);
+        }
+        $count++;
+        $cache->startDataCache(70, $cacheId, $cacheDir);
+        $cache->endDataCache($count);
+        if ($count > $limit) {
+            $this->sendJsonError('Слишком много запросов. Повторите попытку позже', 429);
+        }
+    }
+
     private function getRequestParams() {
-        $body = file_get_contents('php://input');
-        $data = json_decode($body, true);
-        if (!$data) {
-            $data = $_REQUEST;
+        $maxBodyBytes = 10485760;
+        $contentLength = isset($_SERVER['CONTENT_LENGTH']) ? (int)$_SERVER['CONTENT_LENGTH'] : 0;
+        if ($contentLength > $maxBodyBytes) {
+            $this->sendJsonError('Тело запроса превышает допустимый размер', 413);
+        }
+        $body = file_get_contents('php://input', false, null, 0, $maxBodyBytes + 1);
+        if (is_string($body) && strlen($body) > $maxBodyBytes) {
+            $this->sendJsonError('Тело запроса превышает допустимый размер', 413);
+        }
+        $method = strtoupper((string)($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+        $contentType = strtolower((string)($_SERVER['CONTENT_TYPE'] ?? ''));
+        if (is_string($body) && trim($body) !== '' && strpos($contentType, 'application/json') !== false) {
+            $data = json_decode($body, true);
+            if (json_last_error() !== JSON_ERROR_NONE || !is_array($data)) {
+                $this->sendJsonError('Некорректное JSON-тело запроса', 400);
+            }
+        } elseif ($method === 'GET') {
+            $data = $_GET;
+        } else {
+            $data = $_POST;
         }
 
         if ($this->isWin1251) {
@@ -174,7 +221,7 @@ class ApiController extends Controller {
         $this->sendJson(['result' => 'ok', 'data' => $data]);
     }
 
-    private function sendJsonError($errorMsg, $code = 200) {
+    private function sendJsonError($errorMsg, $code = 400) {
         if ($code != 200) {
             http_response_code($code);
         }
@@ -204,6 +251,9 @@ class ApiController extends Controller {
 
         header('Content-Type: application/json; charset=utf-8');
         header('Cache-Control: no-store, no-cache, must-revalidate');
+        header('X-Content-Type-Options: nosniff');
+        header('X-Frame-Options: DENY');
+        header('Referrer-Policy: no-referrer');
         echo $json;
         die();
     }
@@ -225,8 +275,14 @@ class ApiController extends Controller {
     // ----------------------------------------------------
 
     private function sectionListAction() {
+        $params = $this->getRequestParams();
+        $forId = isset($params['forId']) ? (int)$params['forId'] : false;
+        $isGroup = !empty($params['isGroup']);
+        if ($forId && !(new User())->isAdmin()) {
+            $this->sendJsonError('Not authorized for this action', 403);
+        }
         $model = new RightManager();
-        $this->sendJsonOk($model->getSectionsTree(true));
+        $this->sendJsonOk($model->getAccessibleSectionsTree(true, $forId, $isGroup));
     }
 
     private function sectionSaveAction() {
@@ -242,14 +298,16 @@ class ApiController extends Controller {
         }
 
         $model = new RightManager();
+        $sourceParentId = null;
         if ($sectionId) {
             $section = reset($model->getSection(['ID' => $sectionId]));
             if (!$section || $sectionId !== (int)$section['ID']) {
                 $this->sendJsonError('Раздел не найден', 404);
             }
-            $rightParams = ['SECTION' => $sectionId];
-        } else {
-            $rightParams = ['SECTION' => $parentId];
+            if (!isset($params['IBLOCK_SECTION_ID'])) {
+                $parentId = (int)$section['SECTION'];
+            }
+            $sourceParentId = (int)$section['SECTION'];
         }
 
         if ($parentId) {
@@ -262,13 +320,18 @@ class ApiController extends Controller {
             }
         }
 
-        $accessLevel = $model->checkRightsLevel([$rightParams]);
-
-        if ($accessLevel < RightManager::ACCESS_CAN_WRITE) {
-            $this->sendJsonError('Не хватает прав для сохранения раздела');
+        $targets = $sectionId ? [['SECTION' => $sectionId]] : [['SECTION' => $parentId]];
+        if ($sectionId && $parentId !== $sourceParentId) {
+            $targets[] = ['SECTION' => $parentId];
+        }
+        foreach ($targets as $target) {
+            if ($model->checkRightsLevel([$target]) < RightManager::ACCESS_CAN_WRITE) {
+                $this->sendJsonError('Не хватает прав для сохранения раздела', 403);
+            }
         }
 
         if ($sectionId) {
+            $params['SECTION'] = $parentId;
             $model->updateSection($params);
         } else {
             $sectionId = $model->addSection($params);
@@ -290,10 +353,6 @@ class ApiController extends Controller {
             $this->sendJsonError('Некорректный раздел', 400);
         }
 
-        $rightParams = [
-            ['SECTION' => $sectionId],
-            ['SECTION' => $newParentId],
-        ];
         $model = new RightManager();
         if (!reset($model->getSection(['ID' => $sectionId]))) {
             $this->sendJsonError('Раздел не найден', 404);
@@ -304,10 +363,10 @@ class ApiController extends Controller {
         if (!$model->isValidSectionMove($sectionId, $newParentId)) {
             $this->sendJsonError('Нельзя переместить раздел внутрь самого себя', 400);
         }
-        $accessLevel = $model->checkRightsLevel($rightParams);
-
-        if ($accessLevel < RightManager::ACCESS_CAN_WRITE) {
-            $this->sendJsonError('Не хватает прав для сохранения раздела');
+        foreach ([['SECTION' => $sectionId], ['SECTION' => $newParentId]] as $target) {
+            if ($model->checkRightsLevel([$target]) < RightManager::ACCESS_CAN_WRITE) {
+                $this->sendJsonError('Не хватает прав для сохранения раздела', 403);
+            }
         }
 
         $result = $model->updateSection([
@@ -332,13 +391,24 @@ class ApiController extends Controller {
             $this->sendJsonError('Такого раздела не существует', 404);
         }
 
-        $accessLevel = $model->checkRightsLevel([['SECTION' => $sectionId]]);
+        $subtreeIds = $model->getSectionSubtreeIds($sectionId);
+        $accessLevel = $model->checkRightsLevel(array_map(function ($id) {
+            return ['SECTION' => (int)$id];
+        }, $subtreeIds));
         if ($accessLevel < RightManager::ACCESS_CAN_WRITE) {
-            $this->sendJsonError('Не хватает прав для удаления раздела');
+            $this->sendJsonError('Не хватает прав для удаления раздела или одного из вложенных разделов', 403);
         }
 
-        $model->deleteSectionRights($sectionId);
-        $model->deleteSection(['ID' => $sectionId]);
+        $entityIds = [];
+        foreach ($model->getItem(['DECRYPT' => false]) as $item) {
+            if (in_array((int)$item['SECTION'], $subtreeIds, true)) {
+                $entityIds[] = (int)$item['ID'];
+            }
+        }
+        if (!$model->deleteSection(['ID' => $sectionId])) {
+            $this->sendJsonError('Не удалось удалить раздел', 500);
+        }
+        $model->deleteSectionRightsByIds($subtreeIds, $entityIds);
         $this->sendJsonOk();
     }
 
@@ -378,8 +448,21 @@ class ApiController extends Controller {
         $isGroup = isset($params['isGroup']) ? (bool)$params['isGroup'] : false;
 
         $model = new RightManager();
-        $list = $model->getItem();
-        $result = $model->checkEntitiesRights($list, $forId, $isGroup);
+        $list = $model->getItem(['DECRYPT' => false]);
+        $allowed = $model->checkEntitiesRights($list, $forId, $isGroup);
+        $result = [];
+        if (!empty($allowed)) {
+            $levels = [];
+            foreach ($allowed as $item) $levels[(int)$item['ID']] = $item;
+            $result = $model->getItem(['ID' => array_keys($levels)]);
+            foreach ($result as &$item) {
+                $access = $levels[(int)$item['ID']];
+                foreach (['level', 'CAN_READ', 'CAN_WRITE', 'CAN_OWN'] as $field) {
+                    if (array_key_exists($field, $access)) $item[$field] = $access[$field];
+                }
+            }
+            unset($item);
+        }
 
         $this->sendJsonOk($result);
     }
@@ -423,7 +506,7 @@ class ApiController extends Controller {
 
         $accessLevel = $model->checkRightsLevel([$entity ?: ['SECTION' => $params['SECTION']]]);
         if (!AccessPolicy::canWriteItem($entity ?: ['SECTION' => $params['SECTION']], $params['SECTION'], $accessLevel)) {
-            $this->sendJsonError('Не хватает прав для сохранения пароля');
+            $this->sendJsonError('Не хватает прав для сохранения пароля', 403);
         }
 
         $fields = [
@@ -480,8 +563,8 @@ class ApiController extends Controller {
         if ((int)$entity['SECTION'] !== $oldParentId) {
             $this->sendJsonError('Запись не принадлежит исходному разделу', 403);
         }
-        if (!$model->isValidSectionMove($oldParentId, $newParentId)) {
-            $this->sendJsonError('Некорректная иерархия перемещения', 400);
+        if (!reset($model->getSection(['ID' => $newParentId]))) {
+            $this->sendJsonError('Целевой раздел не найден', 404);
         }
 
         $accessLevel = [
@@ -492,7 +575,7 @@ class ApiController extends Controller {
 
         foreach ($accessLevel as $al) {
             if ($al < RightManager::ACCESS_CAN_WRITE) {
-                $this->sendJsonError('Не хватает прав для сохранения пароля');
+                $this->sendJsonError('Не хватает прав для сохранения пароля', 403);
             }
         }
 
@@ -520,7 +603,7 @@ class ApiController extends Controller {
 
         $accessLevel = $model->checkRightsLevel([$entity]);
         if ($accessLevel < RightManager::ACCESS_CAN_WRITE) {
-            $this->sendJsonError('Не хватает прав для удаления пароля');
+            $this->sendJsonError('Не хватает прав для удаления пароля', 403);
         }
 
         if ($model->deleteItem(['ID' => $entityId])) {
@@ -609,10 +692,16 @@ class ApiController extends Controller {
         $accessLevel = $model->checkRightsLevel([$accessTarget]);
 
         if ($accessLevel < RightManager::ACCESS_CAN_WRITE) {
-            $this->sendJsonError('Не хватает прав для сохранения прав');
+            $this->sendJsonError('Не хватает прав для сохранения прав', 403);
         }
 
-        $model->saveEntityRights($sectionId, $entityId, $rights);
+        try {
+            if (!$model->saveEntityRights($sectionId, $entityId, $rights)) {
+                $this->sendJsonError('Не удалось сохранить права', 500);
+            }
+        } catch (\InvalidArgumentException $exception) {
+            $this->sendJsonError($exception->getMessage(), 400);
+        }
         $this->sendJsonOk();
     }
 
@@ -663,7 +752,8 @@ class ApiController extends Controller {
         }
         $accessLevel = $model->checkRightsLevel([$accessTarget]);
         if ($accessLevel == RightManager::ACCESS_CAN_OWN) {
-            if ($newOwner <= 0 || !(new User())->getUserById($newOwner)) {
+            $owner = $newOwner > 0 ? (new User())->getUserById($newOwner) : false;
+            if (!$owner || ($owner['ACTIVE'] ?? 'N') !== 'Y') {
                 $this->sendJsonError('Пользователь-владелец не найден', 400);
             }
             if (!$model->setOwner($sectionId, $entityId, $newOwner)) {
@@ -671,7 +761,7 @@ class ApiController extends Controller {
             }
             $this->sendJsonOk();
         } else {
-            $this->sendJsonError('Не хватает прав для изменения владельца');
+            $this->sendJsonError('Не хватает прав для изменения владельца', 403);
         }
     }
 
@@ -679,6 +769,9 @@ class ApiController extends Controller {
         $params = $this->getRequestParams();
         $method = isset($params['method']) && is_string($params['method']) ? trim($params['method']) : '';
         $methodParams = isset($params['params']) ? $params['params'] : [];
+        if ($method === '') {
+            $this->sendJsonError('Не указан метод', 400);
+        }
 
         $result = false;
         if ($method == 'user.current') {
@@ -691,18 +784,19 @@ class ApiController extends Controller {
             $userModel = new User();
             $result = $userModel->isAdmin();
         } elseif ($method == 'user.get') {
+            if (!(new RightManager())->currentUserCanManageRights()) {
+                $this->sendJsonError('Access denied', 403);
+            }
             $userModel = new User();
             $result = $userModel->getUserList($methodParams);
         } elseif ($method == 'department.get') {
+            if (!(new RightManager())->currentUserCanManageRights()) {
+                $this->sendJsonError('Access denied', 403);
+            }
             $userModel = new User();
             $result = $userModel->getDepartments();
-        } elseif ($method == 'entity.item.get') {
-            $model = new RightManager();
-            $result = $model->secureGetItem($methodParams);
-        }
-
-        if ($method === '') {
-            $this->sendJsonError('Не указан метод', 400);
+        } else {
+            $this->sendJsonError('Метод не поддерживается', 404);
         }
 
         $this->sendJson([
@@ -719,12 +813,6 @@ class ApiController extends Controller {
         } else {
             $this->sendJsonError('error');
         }
-    }
-
-    private function faviconAction() {
-        $params = $this->getRequestParams();
-        $url = isset($params['url']) ? $params['url'] : '';
-        $this->sendFavicon($url);
     }
 
     private function requestAccessAction() {
@@ -753,6 +841,18 @@ class ApiController extends Controller {
         if (!$user || (int)$itemRow['owner'] === (int)$user['ID']) {
             $this->sendJsonError('Нельзя отправить запрос самому себе', 400);
         }
+        if ($model->checkRightsLevel([['SECTION' => (int)$section['ID']]]) >= RightManager::ACCESS_CAN_READ) {
+            $this->sendJsonError('Доступ к разделу уже предоставлен', 409);
+        }
+
+        $cache = \Bitrix\Main\Data\Cache::createInstance();
+        $cacheId = 'request-' . (int)$user['ID'] . '-' . (int)$section['ID'];
+        $cacheDir = '/drdroid.keyrights/request-access';
+        if ($cache->initCache(300, $cacheId, $cacheDir)) {
+            $this->sendJsonError('Повторный запрос можно отправить через 5 минут', 429);
+        }
+
+        $safeSectionName = str_replace(['[', ']'], ['&#91;', '&#93;'], (string)$section['NAME']);
 
         $result = \CIMMessage::Add([
             'TITLE' => 'Запрос на предоставление доступа к разделу',
@@ -762,13 +862,22 @@ class ApiController extends Controller {
             'NOTIFY_TYPE' => IM_NOTIFY_SYSTEM,
             'NOTIFY_MODULE' => 'drdroid.keyrights',
             'MESSAGE' => 'KeyRights: пользователь запрашивает доступ к паролям в разделе ' .
-                '[url=/keyrights/#?section=' . $section['ID'] . ']' . $section['NAME'] . '[/url].',
+                '[url=/keyrights/#?section=' . $section['ID'] . ']' . $safeSectionName . '[/url].',
         ]);
+
+        if (!$result) {
+            $this->sendJsonError('Не удалось отправить запрос владельцу', 500);
+        }
+        $cache->startDataCache(300, $cacheId, $cacheDir);
+        $cache->endDataCache(['sent' => true]);
 
         $this->sendJsonOk($result);
     }
 
     private function importAction() {
+        if (!(new User())->isAdmin()) {
+            $this->sendJsonError('Только администратор может выполнять импорт', 403);
+        }
         $params = $this->getRequestParams();
 
         $importer = new Import();
@@ -784,6 +893,9 @@ class ApiController extends Controller {
     }
 
     private function historyAction() {
+        if (!(new User())->isAdmin()) {
+            $this->sendJsonError('Только администратор может выгружать историю', 403);
+        }
         $params = $this->getRequestParams();
         if (!empty($params['dateFrom']) && !empty($params['dateUntil'])) {
             $data = [
@@ -826,260 +938,11 @@ class ApiController extends Controller {
         }
 
         $params = $this->getRequestParams();
+        if (isset($params['limit']) && (!is_numeric($params['limit']) || (int)$params['limit'] < 1 || (int)$params['limit'] > 500)) {
+            $this->sendJsonError('Параметр limit должен быть числом от 1 до 500', 400);
+        }
         $limit = isset($params['limit']) ? (int)$params['limit'] : 100;
         $this->sendJsonOk((new RightManager())->migrateLegacyItems($limit));
     }
 
-    private function enterTwoAction() {
-        header('Location: /');
-        die();
-    }
-
-    // ----------------------------------------------------
-    // FAVICON HELPER
-    // ----------------------------------------------------
-
-    private function sendFavicon($rawUrl) {
-        $favUrl = $this->getFaviconUrl($rawUrl);
-        if (!$favUrl) {
-            $this->sendDefaultFavicon();
-        }
-
-        $cached = $this->getCachedFavicon($favUrl);
-        if ($cached) {
-            $this->sendFaviconData($cached);
-        }
-
-        $favicon = $this->downloadFavicon($favUrl);
-        if ($this->testFaviconResponse($favicon)) {
-            $this->saveCachedFavicon($favUrl, $favicon);
-            $this->sendFaviconData($favicon);
-        } else {
-            $this->saveCachedFavicon($favUrl, false);
-            $this->sendDefaultFavicon();
-        }
-    }
-
-    private function sendFaviconData($data) {
-        while (@ob_end_clean()) {}
-        header('Content-Description: File Transfer');
-        header('Content-Type: image/x-icon');
-        header('Content-Transfer-Encoding: binary');
-        header('Expires: ' . date('r', time() + 2592000));
-        header('Cache-Control: must-revalidate');
-        header('Pragma: public');
-        header('Content-Length: ' . strlen($data));
-        echo $data;
-        die();
-    }
-
-    private function sendDefaultFavicon() {
-        $defaultPath = $_SERVER['DOCUMENT_ROOT'] . '/bitrix/components/drdroid/keyrights/static/images/no-icon.ico';
-        if (is_file($defaultPath)) {
-            $data = file_get_contents($defaultPath);
-            if ($data !== false) {
-                $this->sendFaviconData($data);
-            }
-        }
-
-        while (@ob_end_clean()) {}
-        http_response_code(204);
-        header('Cache-Control: public, max-age=86400');
-        die();
-    }
-
-    private function downloadFavicon($url) {
-        if (!function_exists('curl_init')) {
-            return false;
-        }
-
-        $curlObj = curl_init();
-        curl_setopt($curlObj, CURLOPT_URL, $url);
-        curl_setopt($curlObj, CURLOPT_RETURNTRANSFER, 1);
-        curl_setopt($curlObj, CURLOPT_BINARYTRANSFER, true);
-        curl_setopt($curlObj, CURLOPT_TIMEOUT, 3);
-        curl_setopt($curlObj, CURLOPT_CONNECTTIMEOUT, 2);
-        // Redirects are deliberately disabled. Every redirect target would
-        // need to go through the same DNS/private-network validation.
-        curl_setopt($curlObj, CURLOPT_FOLLOWLOCATION, false);
-        curl_setopt($curlObj, CURLOPT_MAXFILESIZE, 1024 * 15);
-        curl_setopt($curlObj, CURLOPT_USERAGENT, 'KeyRights favicon/2.0');
-
-        if (isset($this->faviconResolve[$url])) {
-            curl_setopt($curlObj, CURLOPT_RESOLVE, $this->faviconResolve[$url]);
-        }
-
-        if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTP') && defined('CURLPROTO_HTTPS')) {
-            curl_setopt($curlObj, CURLOPT_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-            curl_setopt($curlObj, CURLOPT_REDIR_PROTOCOLS, CURLPROTO_HTTP | CURLPROTO_HTTPS);
-        }
-
-        if (stripos($url, 'https://') === 0) {
-            curl_setopt($curlObj, CURLOPT_SSL_VERIFYPEER, true);
-            curl_setopt($curlObj, CURLOPT_SSL_VERIFYHOST, 2);
-        }
-
-        curl_setopt($curlObj, CURLOPT_NOPROGRESS, false);
-        curl_setopt($curlObj, CURLOPT_PROGRESSFUNCTION, function($resource, $downloadSize, $downloaded, $uploadSize, $uploaded) {
-            return ($downloaded > (1024 * 15)) ? 1 : 0;
-        });
-
-        $favicon = curl_exec($curlObj);
-        $status  = curl_getinfo($curlObj, CURLINFO_HTTP_CODE);
-        curl_close($curlObj);
-
-        if ($status < 200 || $status >= 300) return false;
-        return $favicon;
-    }
-
-    private function getFaviconUrl($rawUrl) {
-        if (!is_string($rawUrl) || strlen($rawUrl) > 2048) {
-            return false;
-        }
-
-        $rawUrl = trim($rawUrl);
-        if ($rawUrl === '') {
-            return false;
-        }
-        if (strpos($rawUrl, '://') === false) {
-            $rawUrl = 'http://' . $rawUrl;
-        }
-
-        $parts = parse_url($rawUrl);
-
-        if (!is_array($parts) || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
-            return false;
-        }
-
-        $scheme = strtolower((string)($parts['scheme'] ?? 'http'));
-        if ($scheme !== 'http' && $scheme !== 'https') {
-            return false;
-        }
-
-        $host = strtolower(rtrim((string)$parts['host'], '.'));
-        $portNumber = !empty($parts['port']) ? (int)$parts['port'] : ($scheme === 'https' ? 443 : 80);
-        if ($portNumber !== 80 && $portNumber !== 443) {
-            return false;
-        }
-
-        // Resolve once, reject every private/reserved address, and pin curl
-        // to the validated public addresses to prevent DNS rebinding.
-        $addresses = filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
-            ? [$host]
-            : $this->resolvePublicIpv4($host);
-        if (empty($addresses)) {
-            return false;
-        }
-        foreach ($addresses as $address) {
-            if (!AccessPolicy::isPublicIpv4($address)) {
-                return false;
-            }
-        }
-
-        $port = ':' . $portNumber;
-        $faviconUrl = $scheme . '://' . $host . $port . '/favicon.ico';
-        $this->faviconResolve[$faviconUrl] = array_map(
-            static function ($address) use ($host, $portNumber) {
-                return $host . ':' . $portNumber . ':' . $address;
-            },
-            $addresses
-        );
-
-        return $faviconUrl;
-    }
-
-    private function resolvePublicIpv4($host) {
-        if (!preg_match('/^(?=.{1,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/i', $host)) {
-            return [];
-        }
-        if ($host === 'localhost' || substr($host, -6) === '.local' || substr($host, -9) === '.internal') {
-            return [];
-        }
-
-        $records = @dns_get_record($host, DNS_A);
-        if (!is_array($records)) {
-            return [];
-        }
-
-        $addresses = [];
-        foreach ($records as $record) {
-            if (!empty($record['ip'])) {
-                $addresses[] = $record['ip'];
-            }
-        }
-
-        return array_values(array_unique($addresses));
-    }
-
-    private function getCachedFavicon($favUrl) {
-        $fn = $this->prepareFaviconFilename($favUrl);
-        $fullPath = $this->getCacheFolder() . $fn;
-
-        if (!file_exists($fullPath)) {
-            return false;
-        }
-
-        $stat = filemtime($fullPath);
-        if ($stat && ($stat + 2592000 > time())) {
-            $fh = fopen($fullPath, 'r');
-            $data = fread($fh, 1024 * 15);
-            fclose($fh);
-            return $data;
-        }
-
-        return false;
-    }
-
-    private function prepareFaviconFilename($favUrl) {
-        return hash('sha256', strtolower((string)$favUrl)) . '.ico';
-    }
-
-    private function testFaviconResponse($favicon) {
-        if (!$favicon) return false;
-        $text = strtolower($favicon);
-
-        if (function_exists('getimagesizefromstring')) {
-            $info = @getimagesizefromstring($favicon);
-        } else {
-            $fn = tempnam(sys_get_temp_dir(), 'keyrights-favicon-');
-            if ($fn === false || file_put_contents($fn, $favicon) === false) {
-                return false;
-            }
-            $info = @getimagesize($fn);
-            @unlink($fn);
-        }
-
-        if (!is_array($info)) {
-            return false;
-        } elseif (!$info[0] || !$info[1]) {
-            return false;
-        } else {
-            return (strpos($text, '<body') === false) && (strpos($text, ' error') === false) && (strpos($text, '<a href') === false);
-        }
-    }
-
-    private function saveCachedFavicon($favUrl, $fileData) {
-        if (!$fileData || strlen($fileData) > 1024 * 15) {
-            return;
-        }
-
-        $this->prepareCacheFolder();
-        $fn = $this->prepareFaviconFilename($favUrl);
-
-        $fullPath = $this->getCacheFolder() . $fn;
-        $fileHandler = fopen($fullPath, 'w');
-        fwrite($fileHandler, $fileData);
-        fclose($fileHandler);
-    }
-
-    private function prepareCacheFolder() {
-        $folder = $this->getCacheFolder();
-        if (!file_exists($folder)) {
-            mkdir($folder, 0755, true);
-        }
-    }
-
-    private function getCacheFolder() {
-        return $_SERVER['DOCUMENT_ROOT'] . '/bitrix/cache/drdroid.keyrights/favicon/';
-    }
 }

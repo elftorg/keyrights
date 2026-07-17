@@ -43,36 +43,6 @@ const runApi = (dispatch, promise, onSuccess) => promise
         handleApiError(dispatch, error);
         return null;
     });
-const loadClientKey = () => {
-    if (!window.CONST || CONST.backend !== 'bitrix24') {
-        return Promise.resolve();
-    }
-
-    BX24.init();
-
-    return new Promise(resolve => {
-        BX24.callMethod(
-            'entity.item.get',
-            {
-                ENTITY: 'keyrights.user',
-                NAME: 'passPhrase'
-            },
-            result => {
-                const item = result
-                    && result.answer
-                    && result.answer.result
-                    && result.answer.result[0];
-
-                if (item) {
-                    CONST.key = item.PREVIEW_TEXT;
-                }
-
-                resolve();
-            }
-        );
-    });
-};
-
 const settleRequest = (promise, fallback) => promise
     .then(value => ({value, error: null}))
     .catch(error => ({value: fallback, error}));
@@ -87,7 +57,7 @@ const fetchData = (currentUser, forId = false) => dispatch => {
             : currentUser.ID;
     }
 
-    const treePromise = api.get(LIST_SECTIONS_URL).then(sections => (
+    const treePromise = api.get(LIST_SECTIONS_URL, itemParams).then(sections => (
         (sections || []).map(section => {
             if (section.SECTION === '') {
                 return extend({}, section, {SECTION: false});
@@ -116,8 +86,7 @@ const fetchData = (currentUser, forId = false) => dispatch => {
         settleRequest(treePromise, []),
         settleRequest(itemsPromise, []),
         settleRequest(usersPromise, []),
-        settleRequest(groupsPromise, []),
-        settleRequest(loadClientKey(), null)
+        settleRequest(groupsPromise, [])
     ]).then(results => {
         dispatch(setData(currentUser, results.map(result => result.value)));
 

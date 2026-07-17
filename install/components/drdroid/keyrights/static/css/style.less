@@ -14,19 +14,7 @@
 }
 
 @font-face {
-    .font-face-params ('Open Sans Light', 'light/opensans-light', 300);
-}
-
-@font-face {
-    .font-face-params ('Open Sans Semibold', 'semibold/opensans-semibold', 600);
-}
-
-@font-face {
-    .font-face-params ('Open Sans Bold', 'bold/opensans-bold', 700);
-}
-
-@font-face {
-    .font-face-params ('Open Sans Extrabold', 'extrabold/opensans-extrabold', 800);
+    .font-face-params ('Open Sans', 'semibold/opensans-semibold', 600);
 }
 
 /****
@@ -1279,19 +1267,6 @@ table:focus {
             a {
                 word-break: break-all;
             }
-            .favicon {
-                position: absolute;
-                left: 22px;
-                top: 5px;
-                img {
-                    .size(16px, 16px);
-                    margin: -3px 3px 0 0;
-
-                    &.no-icon {
-                        .opacity(0.4);
-                    }
-                }
-            }
         }
     }
     .empty-password {
@@ -1351,9 +1326,6 @@ table:focus {
                 transition: all .2s ease;
             }
 
-            .favicon {
-                transition: all .2s ease;
-            }
         }
 
         &.loading {
@@ -1476,10 +1448,6 @@ table:focus {
                     }
                 }
             }
-        }
-        .favicon {
-            display: inline-block;
-            margin-top: 5px;
         }
         .one-line {
             display: inline-block;
@@ -2946,29 +2914,6 @@ table:focus {
         .loader('loader-white-on-blue.gif');
         right: 8px;
         bottom: 8px;
-    }
-}
-
-.favicon {
-    img {
-        .size(16px, 16px);
-        margin: 0 3px 0 0;
-        vertical-align: top;
-
-        &.no-icon {
-            .opacity(0.4);
-        }
-    }
-    &.favorite {
-        &:before {
-            content: '';
-            position: absolute;
-            top: -5px;
-            left: -1px;
-            background: url('../images/fav_big.svg') no-repeat 0 0;
-            .transition;
-            .size(10px, 10px);
-        }
     }
 }
 

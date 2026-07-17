@@ -1,18 +1,27 @@
-const _key = window.__keyrightsClientKey
-    || (window.CONST && window.CONST.key)
-    || '';
+const CryptoJS = require('crypto-js/core');
+require('crypto-js/sha256');
+require('crypto-js/hmac');
+require('crypto-js/pbkdf2');
 
-window.__keyrightsClientKey = _key;
+const _key = (window.CONST && window.CONST.key)
+    || '';
+const _salt = (window.CONST && window.CONST.keySalt) || '';
+const _derivedKey = CryptoJS.PBKDF2(_key, CryptoJS.enc.Hex.parse(_salt), {
+    keySize: 256 / 32,
+    iterations: 210000,
+    hasher: CryptoJS.algo.SHA256
+}).toString(CryptoJS.enc.Hex);
 
 if (window.CONST) {
     delete window.CONST.key;
+    delete window.CONST.keySalt;
 }
 
 const help = require('./helpers');
 
 const cryptHelper = {
     encrypt(obj) {
-        return Aes.Ctr.encrypt(JSON.stringify(obj), _key, 256);
+        return 'k2:' + Aes.Ctr.encrypt(JSON.stringify(obj), _derivedKey, 256);
     },
     decrypt(str) {
         var cryptedObj = {};
@@ -22,7 +31,9 @@ const cryptHelper = {
         }
 
         try {
-            cryptedObj = JSON.parse(Aes.Ctr.decrypt(str, _key, 256));
+            const isKdfV2 = str.indexOf('k2:') === 0;
+            const ciphertext = isKdfV2 ? str.slice(3) : str;
+            cryptedObj = JSON.parse(Aes.Ctr.decrypt(ciphertext, isKdfV2 ? _derivedKey : _key, 256));
             if (typeof cryptedObj !== 'object' || cryptedObj == null) {
                 cryptedObj = {};
             }

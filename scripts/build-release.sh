@@ -36,19 +36,23 @@ mkdir -p "$package_dir"
 tar \
     -C "$root_dir" \
     --exclude='./.git' \
+    --exclude='./.gitattributes' \
+    --exclude='./.gitignore' \
     --exclude='./.github' \
     --exclude='./dist' \
-    --exclude='./docs' \
+    --exclude='./docs/audits' \
     --exclude='./release' \
     --exclude='./scripts' \
     --exclude='./tests' \
     --exclude='./install/components/drdroid/keyrights/node_modules' \
+    --exclude='./install/components/drdroid/keyrights/tests' \
     --exclude='./vendor/bin' \
     -cf - . | tar -C "$package_dir" -xf -
 
 for required_file in \
     install/index.php \
     install/version.php \
+    install/js/jquery-3.7.1.min.js \
     include.php \
     vendor/autoload.php \
     install/components/drdroid/keyrights/static/js/bundle.js; do
@@ -75,7 +79,7 @@ if [[ "$archive_roots" != "drdroid.keyrights" ]]; then
     exit 1
 fi
 
-if tar -tzf "$archive_path" | grep -Eq '^drdroid\.keyrights/(\.git|\.github|dist|docs|release|scripts|tests)(/|$)'; then
+if tar -tzf "$archive_path" | grep -Eq '(^|/)(\.git|\.github|dist|audits|release|scripts|tests)(/|$)'; then
     echo "ERROR: archive contains repository or development-only files" >&2
     exit 1
 fi

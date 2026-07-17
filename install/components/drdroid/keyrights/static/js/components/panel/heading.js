@@ -4,7 +4,7 @@ const Item = ({item, heading, edit, isLoading}) => {
     return (
         <tr>
             <th>
-                <span className="favicon record-detail-icon" aria-hidden="true">
+                <span className="record-detail-icon" aria-hidden="true">
                     <span className="glyphicon glyphicon-lock"></span>
                 </span>
                 {heading}

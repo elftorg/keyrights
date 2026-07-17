@@ -15,7 +15,7 @@ class ItemTable extends DataManager
 {
     public static function getTableName()
     {
-        return 'sib_kr_item';
+        return 'dr_kr_item';
     }
 
     public static function getMap()

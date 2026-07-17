@@ -3,8 +3,6 @@ namespace Drdroid\Keyrights\Model;
 
 use Bitrix\Main\Config\Option;
 use CIBlockElement;
-use CIBlockSection;
-use CEventLog;
 use ConvertTimeStamp;
 
 class History {
@@ -15,14 +13,12 @@ class History {
     private $iblockIdItem;
     private $iblockIdHistory;
     private $ibe;
-    private $ibs;
 
     public function __construct() {
         $this->iblockIdItem = $this->getIblockIdItem();
         $this->iblockIdHistory = $this->getIblockIdHistory();
 
         $this->ibe = new CIBlockElement();
-        $this->ibs = new CIBlockSection();
     }
 
     public function getIblockIdItem() {
@@ -43,8 +39,8 @@ class History {
             ];
 
             $res = $this->ibe->GetList([], ['IBLOCK_ID' => $this->iblockIdItem, 'ID' => $id], false, false, ['NAME']);
-            $name = $res->Fetch();
-            $name = $name['NAME'];
+            $arItem = $res->Fetch();
+            $name = is_array($arItem) ? $arItem['NAME'] : 'Удаленный элемент #' . $id;
 
             $fields = [
                 "IBLOCK_ID" => $this->iblockIdHistory,
