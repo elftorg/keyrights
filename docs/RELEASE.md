@@ -18,20 +18,20 @@ composer install --no-dev --no-interaction --prefer-dist
 composer test
 npm ci --prefix install/components/drdroid/keyrights --legacy-peer-deps
 npm run build --prefix install/components/drdroid/keyrights
-./scripts/build-release.sh 2.0.1
+./scripts/build-release.sh 2.1.4
 ```
 
-Скрипт создаёт `dist/drdroid.keyrights-2.0.1.tar.gz` и `dist/SHA256SUMS`,
-проверяет единственную корневую папку архива и наличие файлов установщика,
-Composer runtime и собранного frontend.
+Скрипт создаёт `dist/drdroid.keyrights-2.1.4.tar.gz` и `dist/SHA256SUMS`,
+проверяет корневую папку модуля, документацию рядом с ней, файлы установщика,
+Composer runtime и собранный frontend.
 
 ## Публикация
 
 Workflow `.github/workflows/release.yml` запускается для тега формата `vX.Y.Z`:
 
 ```bash
-git tag -a v2.0.1 -m 'Release drdroid.keyrights 2.0.1'
-git push origin v2.0.1
+git tag -a v2.1.4 -m 'Release drdroid.keyrights 2.1.4'
+git push origin v2.1.4
 ```
 
 Workflow повторяет проверки PHP и frontend, проверяет совпадение тега со всеми
@@ -39,11 +39,12 @@ Workflow повторяет проверки PHP и frontend, проверяет
 `SHA256SUMS` в GitHub Release. Запуск вручную через Actions также возможен:
 укажите версию, совпадающую с `install/version.php`.
 
-Выпускаемый архив содержит только устанавливаемый модуль. Его структура имеет
-вид `drdroid.keyrights/<файлы модуля>` и не включает `docs/`, `tests/`,
-`release/`, `.git/`, `.github/` и frontend `node_modules/`. Каталог `vendor/`
-с runtime-зависимостями включается в пакет.
+В корне выпускаемого архива находятся `drdroid.keyrights/`, `README.md`,
+`INSTALLATION.md`, `SECURITY.md`, `ARCHITECTURE.md`, `RELEASE.md`,
+`CHANGELOG.md`, `CONTRIBUTING.md` и `LICENSE`. Markdown-инструкции и проектная
+лицензия не помещаются внутрь каталога модуля. `tests/`, аудиты, `.git/`,
+`.github/` и frontend `node_modules/` исключаются; `vendor/` с
+runtime-зависимостями включается в папку модуля.
 
-Релиз 2.0.1 — первый публичный установочный релиз модуля `drdroid.keyrights`.
-Он собирается из содержимого модуля без каталогов `docs/`, `release/`, `.git/`
-и файлов разработки репозитория.
+Релиз 2.1.4 собирается из содержимого модуля без каталогов `docs/`, `release/`,
+`.git/` и файлов разработки репозитория.

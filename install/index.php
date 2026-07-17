@@ -42,11 +42,19 @@ class drdroid_keyrights extends CModule {
         if ($step == 0 || count($reqCheck["errors"]) > 0) {
             $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_INSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/step1.php");
         } elseif ($step == 1) {
+            if (($_REQUEST['licence_agree'] ?? '') !== 'Y') {
+                $GLOBALS["errors"]["licence"] = true;
+                $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_INSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/step1.php");
+                return true;
+            }
             $keyphrase = isset($_REQUEST["keyphrase"]) && is_string($_REQUEST["keyphrase"])
                 ? $_REQUEST["keyphrase"]
                 : '';
             $existingClientKey = \COption::GetOptionString($this->MODULE_ID, "clientPassphrase", '') !== ''
                 || \COption::GetOptionString($this->MODULE_ID, "clientPassphraseEncrypted", '') !== '';
+            if (!$existingClientKey && trim($keyphrase) === '') {
+                $keyphrase = rtrim(strtr(base64_encode(random_bytes(24)), '+/', '-_'), '=');
+            }
             if (!$existingClientKey && strlen($keyphrase) < 16) {
                 $GLOBALS["errors"]["keyphrase"] = true;
                 $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_INSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/step1.php");
@@ -352,12 +360,15 @@ class drdroid_keyrights extends CModule {
     }
 
     public function checkRequirements() {
-        global $DB;
         $arErrors = array();
         $arStatus = array();
 
-        if (!in_array($this->getDatabaseType(), array("mysql", "pgsql"), true)) {
+        $dbType = $this->getDatabaseType();
+        if (!in_array($dbType, array("mysql", "pgsql"), true)) {
             $arErrors["db"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_DB");
+            $arStatus[] = "err";
+        } elseif (!$this->checkDatabasePreflight($dbType)) {
+            $arErrors["db_access"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_DB_ACCESS");
             $arStatus[] = "err";
         } else {
             $arStatus[] = "ok";
@@ -370,33 +381,41 @@ class drdroid_keyrights extends CModule {
             $arStatus[] = "ok";
         }
 
-        if (defined('PHP_VERSION_ID') && PHP_VERSION_ID < 80200) {
+        if (!defined('PHP_VERSION_ID') || PHP_VERSION_ID < 80200) {
             $arErrors["php"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_PHP");
             $arStatus[] = "err";
         } else {
             $arStatus[] = "ok";
         }
 
-        foreach (['openssl'] as $extension) {
-            if (!extension_loaded($extension)) {
-                $arErrors[$extension] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_" . strtoupper($extension));
-                $arStatus[] = "err";
-            } else {
-                $arStatus[] = "ok";
-            }
+        $cryptoFunctions = array('openssl_encrypt', 'openssl_decrypt', 'random_bytes', 'json_encode', 'json_decode');
+        $cryptoReady = extension_loaded('openssl');
+        foreach ($cryptoFunctions as $function) {
+            $cryptoReady = $cryptoReady && function_exists($function);
         }
-
-        $module = new \CModule();
-        if (!$module->IncludeModule("iblock")) {
-            $arErrors["iblock"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_IBLOCK");
+        if (!$cryptoReady) {
+            $arErrors["crypto"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_CRYPTO");
             $arStatus[] = "err";
         } else {
             $arStatus[] = "ok";
         }
 
-        $docRoot = \CSite::GetSiteDocRoot(SITE_ID);
-        if (!is_writable($docRoot . "/urlrewrite.php")) {
-            $arErrors["rewrite"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_REWRITE");
+        $iblockReady = \CModule::IncludeModule("iblock");
+        $filemanReady = \CModule::IncludeModule("fileman") && class_exists('CFileMan');
+        if (!$iblockReady || !$filemanReady) {
+            if (!$iblockReady) {
+                $arErrors["iblock"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_IBLOCK");
+            }
+            if (!$filemanReady) {
+                $arErrors["fileman"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_FILEMAN");
+            }
+            $arStatus[] = "err";
+        } else {
+            $arStatus[] = "ok";
+        }
+
+        if (!$this->checkFilesystemPreflight()) {
+            $arErrors["filesystem"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_FILESYSTEM");
             $arStatus[] = "err";
         } else {
             $arStatus[] = "ok";
@@ -406,6 +425,91 @@ class drdroid_keyrights extends CModule {
             "errors" => $arErrors,
             "status" => $arStatus
         );
+    }
+
+    private function checkDatabasePreflight($dbType) {
+        global $DB;
+        if (!is_object($DB) || !method_exists($DB, 'Query')) {
+            return false;
+        }
+
+        $tableName = str_replace('.', '_', uniqid('dr_kr_install_preflight_', true));
+        $table = $this->quoteIdentifier($tableName);
+        $dropSql = $dbType === 'mysql'
+            ? "DROP TEMPORARY TABLE IF EXISTS " . $table
+            : "DROP TABLE IF EXISTS " . $table;
+        $DB->Query($dropSql, true);
+
+        $createSql = $dbType === 'mysql'
+            ? "CREATE TEMPORARY TABLE " . $table . " (id INT NOT NULL)"
+            : "CREATE TEMPORARY TABLE " . $table . " (id INTEGER NOT NULL)";
+        if (!$DB->Query($createSql, true)) {
+            return false;
+        }
+
+        $writeOk = (bool)$DB->Query("INSERT INTO " . $table . " (id) VALUES (1)", true);
+        $dropOk = (bool)$DB->Query($dropSql, true);
+        return $writeOk && $dropOk;
+    }
+
+    private function checkFilesystemPreflight() {
+        if (!defined('SITE_ID') || SITE_ID === '') {
+            return false;
+        }
+        $docRoot = (string)\CSite::GetSiteDocRoot(SITE_ID);
+        if ($docRoot === '' || !is_dir($docRoot)) {
+            return false;
+        }
+
+        $siteResult = \CSite::GetList($sort = "sort", $order = "desc", array("LID" => SITE_ID));
+        $site = $siteResult->Fetch();
+        if (!$site) {
+            return false;
+        }
+        $siteDir = !empty($site["DIR"]) ? $site["DIR"] : "/";
+
+        $requiredSources = array(
+            __DIR__ . '/frontend/index.php',
+            __DIR__ . '/frontend/api.php',
+            __DIR__ . '/components/drdroid/keyrights/component.php',
+            __DIR__ . '/db/' . $this->getDatabaseType() . '/install.sql',
+            dirname(__DIR__) . '/include.php',
+            dirname(__DIR__) . '/vendor/autoload.php',
+        );
+        foreach ($requiredSources as $source) {
+            if (!is_file($source) || !is_readable($source)) {
+                return false;
+            }
+        }
+
+        $writableTargets = array(
+            $docRoot . '/urlrewrite.php',
+            $docRoot . '/' . trim($this->PUBLIC_DIR, '/'),
+            $docRoot . '/bitrix/components/drdroid/keyrights',
+            $docRoot . '/' . trim($siteDir, '/') . '/.left.menu.php',
+        );
+        foreach ($writableTargets as $target) {
+            if (!$this->isWritableTarget($target)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private function isWritableTarget($path) {
+        $path = preg_replace('#/+#', '/', (string)$path);
+        if (file_exists($path)) {
+            return is_writable($path);
+        }
+        $parent = dirname($path);
+        while (!file_exists($parent)) {
+            $next = dirname($parent);
+            if ($next === $parent) {
+                return false;
+            }
+            $parent = $next;
+        }
+        return is_dir($parent) && is_writable($parent);
     }
 
     public function installRewrite() {
@@ -431,6 +535,9 @@ class drdroid_keyrights extends CModule {
     }
 
     public function installMenu() {
+        if (!\CModule::IncludeModule("fileman")) {
+            return false;
+        }
         $res = \CSite::GetList($sort = "sort", $order = "desc", array("LID" => SITE_ID));
         $site = $res->Fetch();
         $siteDir = !empty($site["DIR"]) ? $site["DIR"] : "/";
