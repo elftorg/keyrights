@@ -31,16 +31,18 @@ trap 'rm -rf "$build_dir"' EXIT
 package_dir="$build_dir/drdroid.keyrights"
 mkdir -p "$package_dir"
 
-# The archive is unpacked directly into /bitrix/modules/. Keep one module
-# directory at the archive root and omit repository/development-only content.
+# Runtime code stays inside drdroid.keyrights/. Human-readable project
+# documentation is copied separately to the archive root next to that folder.
 tar \
     -C "$root_dir" \
+    --exclude='*.md' \
     --exclude='./.git' \
     --exclude='./.gitattributes' \
     --exclude='./.gitignore' \
     --exclude='./.github' \
     --exclude='./dist' \
-    --exclude='./docs/audits' \
+    --exclude='./docs' \
+    --exclude='./LICENSE' \
     --exclude='./release' \
     --exclude='./scripts' \
     --exclude='./tests' \
@@ -49,10 +51,27 @@ tar \
     --exclude='./vendor/bin' \
     -cf - . | tar -C "$package_dir" -xf -
 
+documentation_files=(
+    CHANGELOG.md
+    CONTRIBUTING.md
+    README.md
+    LICENSE
+    docs/ARCHITECTURE.md
+    docs/INSTALLATION.md
+    docs/RELEASE.md
+    docs/SECURITY.md
+)
+for documentation_file in "${documentation_files[@]}"; do
+    if [[ ! -f "$root_dir/$documentation_file" ]]; then
+        echo "ERROR: release documentation is missing $documentation_file" >&2
+        exit 1
+    fi
+    cp "$root_dir/$documentation_file" "$build_dir/$(basename "$documentation_file")"
+done
+
 for required_file in \
     install/index.php \
     install/version.php \
-    install/js/jquery-3.7.1.min.js \
     include.php \
     vendor/autoload.php \
     install/components/drdroid/keyrights/static/js/bundle.js; do
@@ -71,11 +90,25 @@ tar \
     --numeric-owner \
     -C "$build_dir" \
     -czf "$archive_path" \
+    ARCHITECTURE.md \
+    CHANGELOG.md \
+    CONTRIBUTING.md \
+    INSTALLATION.md \
+    LICENSE \
+    README.md \
+    RELEASE.md \
+    SECURITY.md \
     drdroid.keyrights
 
 archive_roots="$(tar -tzf "$archive_path" | awk -F/ 'NF {print $1}' | sort -u)"
-if [[ "$archive_roots" != "drdroid.keyrights" ]]; then
-    echo "ERROR: archive must have exactly one root directory: drdroid.keyrights/" >&2
+expected_roots=$'ARCHITECTURE.md\nCHANGELOG.md\nCONTRIBUTING.md\nINSTALLATION.md\nLICENSE\nREADME.md\nRELEASE.md\nSECURITY.md\ndrdroid.keyrights'
+if [[ "$archive_roots" != "$expected_roots" ]]; then
+    echo "ERROR: archive root layout is invalid" >&2
+    exit 1
+fi
+
+if tar -tzf "$archive_path" | grep -Eq '^drdroid\.keyrights/.*\.md$|^drdroid\.keyrights/LICENSE$'; then
+    echo "ERROR: project documentation must be next to drdroid.keyrights/, not inside it" >&2
     exit 1
 fi
 

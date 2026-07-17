@@ -48,6 +48,8 @@ $checks = [
     'deprecated mcrypt removed' => strpos(file_get_contents($root . '/lib/helper/crypt.php'), 'mcrypt_decrypt') === false,
     'strict ACL subject comparison' => strpos($source['rights'], 'in_array($group, $departmentIds, true)') !== false,
     'installer JSON encoding' => strpos($source['installerForm'], 'json_encode') !== false,
+    'installer native JavaScript' => strpos($source['installerForm'], 'jquery-3.7.1.min.js') === false,
+    'installer passphrase CSPRNG' => strpos($source['installerForm'], 'window.crypto.getRandomValues') !== false,
     'pinned checkout' => preg_match('/uses:\s+actions\/checkout@[0-9a-f]{40}/', $source['ci']) === 1,
     'pinned setup-node' => preg_match('/uses:\s+actions\/setup-node@[0-9a-f]{40}/', $source['release']) === 1,
     'pinned artifact' => preg_match('/uses:\s+actions\/upload-artifact@[0-9a-f]{40}/', $source['release']) === 1,

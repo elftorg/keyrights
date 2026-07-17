@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Версия из install/version.php, например 2.1.3'
+        description: 'Версия из install/version.php, например 2.1.4'
         required: true
         type: string
 

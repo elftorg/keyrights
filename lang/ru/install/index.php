@@ -19,30 +19,35 @@ $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
 
     "<li><b>PHP 8.2</b> или новее;</li>" .
 
-    "<li>Расширение PHP <b>OpenSSL</b>.</li>" .
+    "<li>Расширение PHP <b>OpenSSL</b> и криптографические функции PHP.</li>" .
 
-    "<li>Установлен модуль <b>&laquo;Информационные блоки&raquo;</b>.</li>" .
+    "<li>Установлены модули <b>&laquo;Информационные блоки&raquo;</b> и <b>&laquo;Управление структурой&raquo;</b>.</li>" .
 
-    "<li>Есть права на запись в файл <b>&laquo;urlrewrite.php&raquo;</b>.</li>";
+    "<li>Исходные файлы доступны, а публичный каталог, компонент, меню и <b>urlrewrite.php</b> доступны для записи.</li>";
 
 $MESS['KEYRIGHTS_HEADER_STEP1'] = 'Параметры установки';
 
 $MESS['KEYRIGHTS_LICENSE_STEP1'] = 'Я прочитал <a href="https://github.com/elftorg/keyrights/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">лицензионное соглашение</a> и согласен с ним';
+$MESS['KEYRIGHTS_INSTALL_LICENSE_REQUIRED'] = 'Для установки необходимо принять лицензионное соглашение';
 
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_ERROR'] = "Не удовлетворены минимальные системные требования";
 
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_REPAIR'] = "Пожалуйста, устраните перечисленные замечания, и попробуйте повторить установку";
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'Установка KeyRights возможна только на MySQL/MariaDB или PostgreSQL';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_DB_ACCESS'] = 'Не удалось выполнить тестовую операцию записи во временную таблицу базы данных';
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Требуется Битрикс, версии 20.5.400 и выше';
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_PHP'] = 'Требуется PHP 8.2 или новее';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_OPENSSL'] = 'Не установлено расширение PHP OpenSSL';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_CRYPTO'] = 'Недоступны OpenSSL или обязательные криптографические функции PHP';
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_IBLOCK'] = 'Не установлен модуль Информационные блоки';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_FILEMAN'] = 'Не установлен модуль Управление структурой';
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_REWRITE'] = 'Нет прав на запись в файл urlrewrite.php';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_FILESYSTEM'] = 'Не все файлы модуля доступны для чтения или целевые каталоги и служебные файлы доступны для записи';
 $MESS['KEYRIGHTS_INSTALL_LEGACY_TABLES_INCOMPLETE'] = 'Обнаружен неполный набор старых таблиц KeyRights. Для безопасной миграции необходимы обе таблицы: sib_kr_item и sib_kr_right';
 $MESS['KEYRIGHTS_INSTALL_LEGACY_MIGRATION_ERROR'] = 'Не удалось перенести данные из старых таблиц KeyRights';
 
@@ -51,6 +56,8 @@ $MESS['KEYRIGHTS_INSTALL_PASS_LABEL'] = 'Введите ключ-фразу дл
 $MESS['KEYRIGHTS_INSTALL_PASS_ALREADY_EXISTS_REWRITE'] = 'Клиентский пароль уже задан (модуль KeyRights ранее был установлен).<br>Если вы хотите использовать существующий пароль - оставьте это поле пустым.';
 
 $MESS['KEYRIGHTS_INSTALL_PASS_EMPTY'] = 'Ключевая фраза должна содержать не менее 16 символов';
+$MESS['KEYRIGHTS_INSTALL_PASS_GENERATE'] = 'Сгенерировать ключ-фразу';
+$MESS['KEYRIGHTS_INSTALL_PASS_GENERATED_NOTICE'] = 'Сохраните ключ-фразу в надёжном месте: без неё данные нельзя будет расшифровать.';
 
 $MESS['KEYRIGHTS_INSTALL_BUTTON_INSTALL'] = 'Установить';
 
