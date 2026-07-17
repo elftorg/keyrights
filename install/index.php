@@ -37,18 +37,18 @@ class drdroid_keyrights extends CModule {
         $reqCheck = $this->checkRequirements();
         // step1.php is included by Bitrix in the global scope.
         $GLOBALS["reqCheck"] = is_array($reqCheck) ? $reqCheck : array();
-        $step = (int)($_REQUEST["step"] ?? 0);
+        $step = $this->getRequestStep(0);
 
         if ($step == 0 || count($reqCheck["errors"]) > 0) {
             $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_INSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/step1.php");
         } elseif ($step == 1) {
-            if (($_REQUEST['licence_agree'] ?? '') !== 'Y') {
+            if (($_POST['licence_agree'] ?? '') !== 'Y') {
                 $GLOBALS["errors"]["licence"] = true;
                 $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_INSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/step1.php");
                 return true;
             }
-            $keyphrase = isset($_REQUEST["keyphrase"]) && is_string($_REQUEST["keyphrase"])
-                ? $_REQUEST["keyphrase"]
+            $keyphrase = isset($_POST["keyphrase"]) && is_string($_POST["keyphrase"])
+                ? $_POST["keyphrase"]
                 : '';
             $existingClientKey = \COption::GetOptionString($this->MODULE_ID, "clientPassphrase", '') !== ''
                 || \COption::GetOptionString($this->MODULE_ID, "clientPassphraseEncrypted", '') !== '';
@@ -478,6 +478,14 @@ class drdroid_keyrights extends CModule {
         $siteResult = \CSite::GetList($sort = "sort", $order = "desc", array("LID" => SITE_ID));
         $site = $siteResult->Fetch();
         if (!$site) {
+            $siteResult = \CSite::GetList($sort = "sort", $order = "asc", array("DEFAULT" => "Y"));
+            $site = $siteResult->Fetch();
+            if (!$site) {
+                $siteResult = \CSite::GetList($sort = "sort", $order = "asc", array("ACTIVE" => "Y"));
+                $site = $siteResult->Fetch();
+            }
+        }
+        if (!$site) {
             $this->addPreflightMessage(
                 $result['errors'],
                 $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_SITE', array('#SITE_ID#' => (string)SITE_ID))
@@ -862,12 +870,12 @@ class drdroid_keyrights extends CModule {
             return false;
         }
 
-        $step = (int)($_REQUEST["step"] ?? 1);
+        $step = $this->getRequestStep(1);
         if ($step !== 2) {
             $APPLICATION->IncludeAdminFile(GetMessage("KEYRIGHTS_UNINSTALL"), $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/unstep1.php");
         } else {
-            $moduleParams = isset($_REQUEST['module']) && is_array($_REQUEST['module'])
-                ? $_REQUEST['module']
+            $moduleParams = isset($_POST['module']) && is_array($_POST['module'])
+                ? $_POST['module']
                 : [];
             // The checkbox means “save tables/data”. Preserve the complete
             // decryptable dataset when it is selected, including its keys.
@@ -892,6 +900,13 @@ class drdroid_keyrights extends CModule {
             LocalRedirect("/bitrix/admin/partner_modules.php");
         }
         return true;
+    }
+
+    private function getRequestStep($default) {
+        $value = array_key_exists('step', $_POST)
+            ? $_POST['step']
+            : (array_key_exists('step', $_GET) ? $_GET['step'] : $default);
+        return is_scalar($value) ? (int)$value : (int)$default;
     }
 
     public function RunSQLBatch($filePath, $bReturnQuery = false, $bConvertCharset = false) {

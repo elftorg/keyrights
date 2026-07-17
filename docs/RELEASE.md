@@ -18,10 +18,10 @@ composer install --no-dev --no-interaction --prefer-dist
 composer test
 npm ci --prefix install/components/drdroid/keyrights --legacy-peer-deps
 npm run build --prefix install/components/drdroid/keyrights
-./scripts/build-release.sh 2.1.5
+./scripts/build-release.sh 2.1.6
 ```
 
-Скрипт создаёт `dist/drdroid.keyrights-2.1.5.tar.gz` и `dist/SHA256SUMS`,
+Скрипт создаёт `dist/drdroid.keyrights-2.1.6.tar.gz` и `dist/SHA256SUMS`,
 проверяет корневую папку модуля, документацию рядом с ней, файлы установщика,
 Composer runtime и собранный frontend.
 
@@ -30,8 +30,8 @@ Composer runtime и собранный frontend.
 Workflow `.github/workflows/release.yml` запускается для тега формата `vX.Y.Z`:
 
 ```bash
-git tag -a v2.1.5 -m 'Release drdroid.keyrights 2.1.5'
-git push origin v2.1.5
+git tag -a v2.1.6 -m 'Release drdroid.keyrights 2.1.6'
+git push origin v2.1.6
 ```
 
 Workflow повторяет проверки PHP и frontend, проверяет совпадение тега со всеми
@@ -46,5 +46,5 @@ Workflow повторяет проверки PHP и frontend, проверяет
 `.github/` и frontend `node_modules/` исключаются; `vendor/` с
 runtime-зависимостями включается в папку модуля.
 
-Релиз 2.1.5 собирается из содержимого модуля без каталогов `docs/`, `release/`,
+Релиз 2.1.6 собирается из содержимого модуля без каталогов `docs/`, `release/`,
 `.git/` и файлов разработки репозитория.
