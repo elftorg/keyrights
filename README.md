@@ -2,7 +2,7 @@
 
 Модуль управления защищёнными записями KeyRights для Bitrix24 On-Premise.
 
-Текущий релиз: **2.0.0**.
+Текущий релиз: **2.0.1**.
 
 Основной репозиторий: [github.com/elftorg/keyrights](https://github.com/elftorg/keyrights/).
 

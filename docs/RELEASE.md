@@ -6,6 +6,7 @@
 
 - `install/version.php`;
 - `composer.json`;
+- `composer.lock` (обновите `content-hash` командой `composer update --lock`);
 - `install/components/drdroid/keyrights/package.json`;
 - `install/components/drdroid/keyrights/package-lock.json`.
 
@@ -43,5 +44,6 @@ Workflow повторяет проверки PHP и frontend, проверяет
 `release/`, `.git/`, `.github/` и frontend `node_modules/`. Каталог `vendor/`
 с runtime-зависимостями включается в пакет.
 
-Релиз 2.0.0 собран из содержимого модуля без каталогов `docs/`, `release/`,
-`.git/` и файлов разработки репозитория.
+Релиз 2.0.1 — первый публичный установочный релиз модуля `drdroid.keyrights`.
+Он собирается из содержимого модуля без каталогов `docs/`, `release/`, `.git/`
+и файлов разработки репозитория.

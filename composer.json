@@ -2,7 +2,7 @@
   "name": "drdroid/keyrights",
   "description": "Bitrix24 KeyRights module",
   "type": "bitrix-module",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "license": "MIT",
   "homepage": "https://github.com/elftorg/keyrights/",
   "support": {
