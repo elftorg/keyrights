@@ -49,7 +49,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.19'
+          node-version: '24'
           cache: npm
           cache-dependency-path: install/components/drdroid/keyrights/package-lock.json
 
