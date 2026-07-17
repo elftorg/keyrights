@@ -1,0 +1,50 @@
+{
+  "name": "@drdroid/keyrights-frontend",
+  "version": "2.0.0",
+  "private": true,
+  "description": "KeyRights Bitrix24 frontend",
+  "license": "MIT",
+  "homepage": "https://github.com/elftorg/keyrights/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/elftorg/keyrights.git"
+  },
+  "bugs": {
+    "url": "https://github.com/elftorg/keyrights/issues"
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "dependencies": {
+    "blob": "0.0.4",
+    "classnames": "2.5.1",
+    "create-react-class": "15.7.0",
+    "es6-promise": "4.2.8",
+    "extend": "3.0.2",
+    "file-saver": "2.0.5",
+    "moment": "2.30.1",
+    "prop-types": "15.8.1",
+    "react": "16.14.0",
+    "react-day-picker": "1.2.0",
+    "react-dom": "16.14.0",
+    "react-gemini-scrollbar": "2.3.4",
+    "react-redux": "5.1.2",
+    "redux": "4.2.1",
+    "redux-thunk": "2.4.2",
+    "superagent": "10.2.3",
+    "zxcvbn": "4.4.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.29.7",
+    "@babel/preset-env": "7.28.0",
+    "@babel/preset-react": "7.27.1",
+    "babel-loader": "10.0.0",
+    "terser-webpack-plugin": "^5.6.1",
+    "webpack": "^5.108.4",
+    "webpack-cli": "6.0.1"
+  },
+  "scripts": {
+    "build": "webpack --config webpack.config.js --mode production",
+    "test": "npm run build"
+  }
+}

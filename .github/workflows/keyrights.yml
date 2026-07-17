@@ -1,0 +1,72 @@
+name: KeyRights
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  php:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3']
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: curl, openssl
+          coverage: none
+      - run: composer validate
+      - run: composer install --no-dev --no-interaction --prefer-dist
+      - run: composer test
+      - name: PHP syntax check
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -path './vendor' -prune -o -type f \( -name '*.php' -o -name '*.phtml' \) -print0 |
+            xargs -0 -n1 php -l
+
+  frontend:
+    name: Frontend production bundle
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: install/components/drdroid/keyrights
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: install/components/drdroid/keyrights/package-lock.json
+      - run: npm ci --legacy-peer-deps
+      - run: npm run build
+      - run: npm audit --omit=dev
+
+  integration:
+    name: HTTP integration access checks
+    if: ${{ secrets.KEYRIGHTS_TEST_URL != '' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: .
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, openssl
+          coverage: none
+      - run: php tests/integration/http_access.php
+        env:
+          KEYRIGHTS_TEST_URL: ${{ secrets.KEYRIGHTS_TEST_URL }}
+          KEYRIGHTS_TEST_COOKIE: ${{ secrets.KEYRIGHTS_TEST_COOKIE }}
+          KEYRIGHTS_TEST_CSRF: ${{ secrets.KEYRIGHTS_TEST_CSRF }}
+          KEYRIGHTS_TEST_ITEM_ID: ${{ secrets.KEYRIGHTS_TEST_ITEM_ID }}
+          KEYRIGHTS_TEST_SECTION_ID: ${{ secrets.KEYRIGHTS_TEST_SECTION_ID }}

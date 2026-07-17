@@ -1,0 +1,3 @@
+<?php
+
+$MESS['APPLICATION_ENV'] = 'Режим застосунку';

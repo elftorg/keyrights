@@ -1,0 +1,9 @@
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*.log
+coverage/
+node_modules/
+vendor/bin/
