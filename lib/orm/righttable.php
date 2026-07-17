@@ -11,7 +11,7 @@ class RightTable extends DataManager
 {
     public static function getTableName()
     {
-        return 'sib_kr_right';
+        return 'dr_kr_right';
     }
 
     public static function getMap()

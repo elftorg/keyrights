@@ -63,7 +63,6 @@ const Root = React.createClass({
             })}>
                 <div className="keyrights-mobile-bar">
                     <button type="button"
-                        type="button"
                         className={classes('keyrights-mobile-button folders', {active: this.state.navigationOpen})}
                         onClick={() => this.setState({navigationOpen: !this.state.navigationOpen, detailsOpen: false})}>
                         <span className="keyrights-mobile-icon"></span>
@@ -71,7 +70,6 @@ const Root = React.createClass({
                     </button>
                     {this.props.panelOpened ?
                         <button type="button"
-                            type="button"
                             className={classes('keyrights-mobile-button details', {active: this.state.detailsOpen})}
                             onClick={() => this.setState({detailsOpen: !this.state.detailsOpen, navigationOpen: false})}>
                             <span className="keyrights-mobile-icon"></span>

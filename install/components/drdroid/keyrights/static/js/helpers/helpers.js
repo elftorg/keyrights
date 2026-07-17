@@ -86,31 +86,6 @@ const help = {
 
         let now = moment();
 
-        //let access = _accessStates.INHERITS;
-        //rights.forEach(r => {
-        //    if (r.group && user.UF_DEPARTMENT.indexOf(r.group) !== -1) {
-        //        if (r.blocked || (r.timed && moment(r.timed).isBefore(now))) {
-        //            access = _accessStates.NO_ACCESS;
-        //
-        //            return;
-        //        }
-        //
-        //        access = r.edit ? _accessStates.HAS_ACCESS_WRITE : _accessStates.HAS_ACCESS_READ;
-        //    }
-        //
-        //    if (r.user && parseInt(r.user) === userId) {
-        //        if (r.blocked || (r.timed && moment(r.timed).isBefore(now))) {
-        //            access = _accessStates.NO_ACCESS;
-        //
-        //            return;
-        //        }
-        //
-        //        access = r.edit ? _accessStates.HAS_ACCESS_WRITE : _accessStates.HAS_ACCESS_READ;
-        //    }
-        //});
-        //
-        //return access;
-
         // check user
         if (rights.filter(r => !r.blocked && r.user && parseInt(r.user) === userId && (r.timed && moment(r.timed).isBefore(now))).length) return _accessStates.NO_ACCESS;
         if (rights.filter(r => !r.blocked && r.user && parseInt(r.user) === userId && !r.edit).length) return _accessStates.HAS_ACCESS_READ;
@@ -124,81 +99,6 @@ const help = {
         if (rights.filter(r => r.blocked && user.UF_DEPARTMENT.indexOf(r.group) !== -1).length) return _accessStates.NO_ACCESS;
 
         return _accessStates.INHERITS;
-    },
-
-    getAllowedFolders(user, folders, index, items) {
-        const okayFolders = folders.reduce((prev, cur) => {
-            let arr = [];
-
-            let cur2 = cur;
-
-            do {
-                switch (this._folderRights(cur2, user)) {
-                    case _accessStates.NO_ACCESS:
-                        return prev;
-                    case _accessStates.INHERITS:
-                        break;
-                    case _accessStates.HAS_ACCESS_WRITE:
-                        arr.push(cur2);
-                        arr.map(a => prev[a.ID] = a);
-                        return prev;
-                    case _accessStates.HAS_ACCESS_OWN:
-                        arr.push(cur2);
-                        arr.map(a => prev[a.ID] = a);
-                        return prev;
-                    case _accessStates.HAS_ACCESS_READ:
-                        arr.push(cur2);
-                        arr.map(a => prev[a.ID] = a);
-                        return prev;
-                    default:
-                        break;
-                }
-
-                if (prev[cur2.ID]) {
-                    arr.push(cur2);
-                    arr.map(a => prev[a.ID] = a);
-                    return prev;
-                }
-
-                arr.push(cur2);
-
-                if (cur2.SECTION === false) break;
-
-                cur2 = folders[index[cur2.SECTION]];
-
-            } while (true);
-
-            return prev;
-        }, {});
-
-        items.map(i => okayFolders[i.SECTION] = folders[index[i.SECTION]]);
-
-        for (let id in okayFolders) {
-            let cur = okayFolders[id];
-
-            while (cur.SECTION !== false) {
-                let parent = folders[index[cur.SECTION]];
-
-                if (okayFolders[parent.ID]) break;
-
-                okayFolders[parent.ID] = parent;
-
-                cur = parent;
-            }
-        }
-
-        let okayFoldersArr = Object.keys(okayFolders).map(k => {
-            const itemParents = this.getItemParents(okayFolders[k], folders, index).map(p => parseInt(p.ID));
-
-            return extend(
-                {},
-                okayFolders[k],
-                this.getFolderAccessObj(okayFolders[k], user, folders, index),
-                {ALL_PARENTS: itemParents}
-            );
-        });
-
-        return okayFoldersArr.map(f => extend({}, f, {ALL_KIDS: this.getItemKids(parseInt(f.ID), okayFoldersArr)}));
     },
 
     getItemKids(id, sections) {
@@ -287,14 +187,20 @@ const help = {
      * @returns {string}
      */
     strRand(len) {
-        var result      = '',
-            words       = '0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM',
-            maxPosition = words.length - 1,
-            position;
+        const secureCrypto = window.crypto || window.msCrypto;
+        if (!secureCrypto || typeof secureCrypto.getRandomValues !== 'function') {
+            throw new Error('Secure random number generator is unavailable');
+        }
+        const words = '0123456789qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM';
+        const maxUnbiased = Math.floor(0x100000000 / words.length) * words.length;
+        const random = new Uint32Array(1);
+        let result = '';
 
         for (var idx = len; idx > 0; idx--) {
-            position = Math.floor (Math.random() * maxPosition);
-            result += words.substring(position, position + 1);
+            do {
+                secureCrypto.getRandomValues(random);
+            } while (random[0] >= maxUnbiased);
+            result += words.charAt(random[0] % words.length);
         }
 
         return result;

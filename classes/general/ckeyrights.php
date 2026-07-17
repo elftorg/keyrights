@@ -48,14 +48,19 @@ class CKeyrights {
         }
         defined("KEYRIGHTS_BASE_URL") || define("KEYRIGHTS_BASE_URL", dirname($path));
 
-        // Get relative route
-        $requestUri = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '/';
-        $route = trim(str_replace(KEYRIGHTS_BASE_URL, '', $requestUri), '/');
-        $route = explode('?', $route)[0]; // remove query string
-        $route = rtrim($route, '/'); // normalize trailing slash
+        // Get relative route. A dedicated endpoint may pass it explicitly so
+        // routing does not require mutation of request-wide server variables.
+        if (isset($this->_params['ROUTE'])) {
+            $route = trim((string)$this->_params['ROUTE'], '/');
+        } else {
+            $requestUri = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '/';
+            $route = trim(str_replace(KEYRIGHTS_BASE_URL, '', $requestUri), '/');
+            $route = explode('?', $route)[0]; // remove query string
+            $route = rtrim($route, '/'); // normalize trailing slash
+        }
 
         // Check if this is an API call
-        $apiPrefixes = ['crypt', 'api', 'exchange', 'safari-enter-two'];
+        $apiPrefixes = ['crypt', 'api', 'exchange'];
         $isApi = false;
         foreach ($apiPrefixes as $prefix) {
             if ($route === $prefix || strpos($route, $prefix . '/') === 0) {
@@ -119,7 +124,13 @@ class CKeyrights {
 
         $translations = self::getTranslations();
 
-        $key = Option::get('drdroid.keyrights', 'clientPassphrase', '');
+        $canUseVault = (new \Drdroid\Keyrights\Model\RightManager())->currentUserCanUseVault();
+        $key = $canUseVault ? \Drdroid\Keyrights\Helper\Crypt::getClientPassphrase() : '';
+        $keySalt = Option::get('drdroid.keyrights', 'clientKeySalt', '');
+        if (!preg_match('/^[a-f0-9]{32}$/', $keySalt)) {
+            $keySalt = bin2hex(random_bytes(16));
+            Option::set('drdroid.keyrights', 'clientKeySalt', $keySalt);
+        }
 
         $isWin1251 = defined('SITE_CHARSET') && (strtoupper(SITE_CHARSET) == 'WINDOWS-1251');
         
@@ -141,6 +152,7 @@ class CKeyrights {
         $userDataJson = json_encode($userDataUtf8, $jsonFlags);
         $translationsJson = json_encode($translationsUtf8, $jsonFlags);
         $keyJson = json_encode($key, $jsonFlags);
+        $keySaltJson = json_encode($keySalt, $jsonFlags);
         $sessId = bitrix_sessid();
         $sessIdJson = json_encode($sessId, $jsonFlags);
         $baseUrlJson = json_encode(rtrim(KEYRIGHTS_BASE_URL, '/') . '/', $jsonFlags);
@@ -177,9 +189,10 @@ class CKeyrights {
     CONST.staticPath = '/bitrix/components/drdroid/keyrights/static/';
     CONST.translator = {$translationsJson};
     CONST.key = {$keyJson};
+    CONST.keySalt = {$keySaltJson};
+    CONST.csrfToken = {$sessIdJson};
 
     window.userData = {$userDataJson};
-    window.csrfToken = {$sessIdJson};
 
     window.String._ = function(messageId) {
         if (window.CONST && window.CONST.translator && window.CONST.translator[messageId]) {
@@ -192,12 +205,13 @@ HTML;
 
         $staticPath = '/bitrix/components/drdroid/keyrights/static';
         $staticRoot = $_SERVER['DOCUMENT_ROOT'] . $staticPath;
-        $assetVersion = max(
-            (int)@filemtime($staticRoot . '/css/style.css'),
-            (int)@filemtime($staticRoot . '/js/libs/aes.js'),
-            (int)@filemtime($staticRoot . '/js/libs/papaparse.js'),
-            (int)@filemtime($staticRoot . '/js/bundle.js')
-        );
+        $assetVersion = 0;
+        foreach (['/css/style.css', '/js/libs/aes.js', '/js/libs/papaparse.js', '/js/bundle.js'] as $assetFile) {
+            $absoluteAssetFile = $staticRoot . $assetFile;
+            if (is_file($absoluteAssetFile)) {
+                $assetVersion = max($assetVersion, (int)filemtime($absoluteAssetFile));
+            }
+        }
 
         // The public page preloads CSS before /bitrix/header.php so the
         // component's legacy Bootstrap does not override the portal template.
@@ -254,14 +268,6 @@ HTML;
             return $APPLICATION->ConvertCharset($value, $from, $to);
         }
         return $value;
-    }
-
-    public static function getClientCypherKey() {
-        return Option::get(static::MODULE_ID, 'clientPassphrase', '');
-    }
-
-    public static function getServerCypherKey() {
-        return Option::get(static::MODULE_ID, 'serverPassphrase', '');
     }
 
     public static function onIblockSectionDelete($arFields) {

@@ -3,12 +3,16 @@ global $reqCheck, $APPLICATION;
 $reqCheck = is_array($reqCheck) ? $reqCheck : array();
 $reqCheck['errors'] = isset($reqCheck['errors']) && is_array($reqCheck['errors']) ? $reqCheck['errors'] : array();
 $reqCheck['status'] = isset($reqCheck['status']) && is_array($reqCheck['status']) ? $reqCheck['status'] : array();
+$reqStatus = array_values(array_filter($reqCheck['status'], function ($status) {
+    return $status === 'ok' || $status === 'err';
+}));
+$reqStatusJson = json_encode($reqStatus, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 ?>
-<script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
+<script src="/bitrix/modules/drdroid.keyrights/install/js/jquery-3.7.1.min.js"></script>
 <div class="keyrightsBlock">
-    <form action="<?= $APPLICATION->GetCurPage()?>" method="post">
+    <form action="<?= htmlspecialcharsbx($APPLICATION->GetCurPage()) ?>" method="post">
         <?=bitrix_sessid_post();?>
-        <input type="hidden" name="lang" value="<?=LANGUAGE_ID?>">
+        <input type="hidden" name="lang" value="<?=htmlspecialcharsbx(LANGUAGE_ID)?>">
         <input type="hidden" name="step" value="1">
         <input type="hidden" name="id" value="drdroid.keyrights">
         <input type="hidden" name="install" value="Y">
@@ -61,7 +65,7 @@ $reqCheck['status'] = isset($reqCheck['status']) && is_array($reqCheck['status']
 
         <script type="text/javascript">
             $(function() {
-                initReqState(["<?=  implode('","', $reqCheck['status']); ?>"]);
+                initReqState(<?= $reqStatusJson ?: '[]' ?>);
                 $('[name="keyphrase"]').focus();
             });
 

@@ -12,7 +12,7 @@ const Right = React.createClass({
         }
     },
     changeTimed(d) {
-        if (moment(d).date() <= moment().date()) return false;
+        if (d && !moment(d).isAfter(moment(), 'day')) return false;
 
         this.setState({isDatePickerVisible: false});
         this.props.saveRights(this.props.right, {timed: d ? moment(d).format() : null});

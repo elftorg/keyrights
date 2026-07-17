@@ -4,6 +4,10 @@ namespace Drdroid\Keyrights\Model;
 use Drdroid\Keyrights\Helper\Crypt;
 
 class Import {
+    private const SESSION_KEY = 'keyrights-import';
+    private const SESSION_TTL = 1800;
+    private const MAX_SESSION_BYTES = 8388608;
+    private const SESSION_PAYLOAD_PREFIX = 'keyrights-import-state-v1:';
 
     private $parsedCsvData         = [];
     private $newSections           = [];
@@ -38,6 +42,12 @@ class Import {
                 'message' => $this->translate('ONLY_ADMIN_CAN'),
             ];
         }
+        if (!is_array($data) || count($data) > 5000) {
+            return [
+                'result' => 'error',
+                'message' => 'Import contains too many rows',
+            ];
+        }
 
         $this->parsedCsvData = $data;
         $this->existPasswords = $this->rightManager->getItem(['select' => ['ID', 'SECTION', 'NAME']]);
@@ -62,7 +72,12 @@ class Import {
     private function checkTimeLimit() {
         $curTime = time();
         if ($this->startTime + $this->maxTime <= $curTime) {
-            $this->saveStepData();
+            if (!$this->saveStepData()) {
+                return [
+                    'result' => 'error',
+                    'message' => 'Import state is too large to store safely',
+                ];
+            }
             return ['result' => 'ok', 'data' => 'progress', 'step' => $this->currentStep];
         } else {
             return false;
@@ -70,7 +85,9 @@ class Import {
     }
 
     private function saveStepData() {
-        $_SESSION['keyrights-import'] = [
+        $state = [
+            'userId'                => (int)$this->userModel->getUserId(),
+            'expiresAt'             => time() + self::SESSION_TTL,
             'currentStep'           => $this->currentStep,
             'currentStep4Index'     => $this->currentStep4Index,
             'parsedCsvData'         => $this->parsedCsvData,
@@ -84,11 +101,65 @@ class Import {
             'updatedPasswords'      => $this->updatedPasswords,
             'addedSections'         => $this->addedSections,
         ];
+        $serialized = serialize($state);
+        if (strlen($serialized) > self::MAX_SESSION_BYTES) {
+            unset($_SESSION[self::SESSION_KEY]);
+            return false;
+        }
+        $payload = Crypt::encrypt(self::SESSION_PAYLOAD_PREFIX . $serialized);
+        if (strlen($payload) > self::MAX_SESSION_BYTES) {
+            unset($_SESSION[self::SESSION_KEY]);
+            return false;
+        }
+        $_SESSION[self::SESSION_KEY] = [
+            'userId' => $state['userId'],
+            'expiresAt' => $state['expiresAt'],
+            'payload' => $payload,
+        ];
+        return true;
     }
 
     private function restoreStepData() {
-        $data = isset($_SESSION['keyrights-import']) ? $_SESSION['keyrights-import'] : null;
-        if (isset($data) && is_array($data)) {
+        $envelope = isset($_SESSION[self::SESSION_KEY]) ? $_SESSION[self::SESSION_KEY] : null;
+        if (!is_array($envelope)
+            || (int)($envelope['userId'] ?? 0) !== (int)$this->userModel->getUserId()
+            || (int)($envelope['expiresAt'] ?? 0) < time()
+            || !is_string($envelope['payload'] ?? null)
+        ) {
+            unset($_SESSION[self::SESSION_KEY]);
+            return false;
+        }
+
+        try {
+            $plaintext = Crypt::decrypt($envelope['payload']);
+            if (strpos($plaintext, self::SESSION_PAYLOAD_PREFIX) !== 0) {
+                throw new \RuntimeException('Invalid import state payload');
+            }
+            $serialized = substr($plaintext, strlen(self::SESSION_PAYLOAD_PREFIX));
+            $data = unserialize($serialized, ['allowed_classes' => false]);
+        } catch (\Throwable $exception) {
+            unset($_SESSION[self::SESSION_KEY]);
+            return false;
+        }
+        $required = [
+            'userId', 'expiresAt', 'currentStep', 'currentStep4Index',
+            'parsedCsvData', 'newSections', 'existSectionsNames',
+            'existSectionsIds', 'existSections', 'existPasswords', 'errors',
+            'addedPasswords', 'updatedPasswords', 'addedSections',
+        ];
+        $isComplete = is_array($data);
+        foreach ($required as $field) {
+            if (!$isComplete || !array_key_exists($field, $data)) {
+                $isComplete = false;
+                break;
+            }
+        }
+        if ($isComplete
+            && (int)$data['userId'] === (int)$this->userModel->getUserId()
+            && (int)$data['expiresAt'] >= time()
+            && is_array($data['parsedCsvData'])
+            && count($data['parsedCsvData']) <= 5000
+        ) {
             $this->currentStep           = $data['currentStep'];
             $this->currentStep4Index     = $data['currentStep4Index'];
             $this->parsedCsvData         = $data['parsedCsvData'];
@@ -104,10 +175,17 @@ class Import {
 
             return true;
         }
+        unset($_SESSION[self::SESSION_KEY]);
         return false;
     }
 
     public function continueImport() {
+        if (!$this->userModel->isAdmin()) {
+            return [
+                'result' => 'error',
+                'message' => $this->translate('ONLY_ADMIN_CAN'),
+            ];
+        }
         if (!$this->restoreStepData()) {
             return ['result' => 'error', 'error' => $this->translate('IMPORT_PROCESS_FAIL')];
         }
@@ -272,7 +350,6 @@ class Import {
             $tmpResult = $this->checkTimeLimit();
             if (is_array($tmpResult)) {
                 $tmpResult['s'] = $this->newSections;
-                $tmpResult['ca'] = $countActions;
                 return $tmpResult;
             }
 
@@ -328,7 +405,7 @@ class Import {
     }
 
     public function getImportResults() {
-        unset($_SESSION['keyrights-import']);
+        unset($_SESSION[self::SESSION_KEY]);
         return [
             'result' => 'ok',
             'data'   => [

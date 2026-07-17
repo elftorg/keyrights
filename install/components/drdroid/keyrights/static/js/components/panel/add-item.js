@@ -211,9 +211,8 @@ const AddItem = React.createClass({
             e.target.value = '';
         };
 
-        reader.onerror = e => {
-            console.log('Error: ', e);
-            this.props.showAlert(help.t('FILE_UPLOAD_ERROR_UNKNWN') + e);
+        reader.onerror = () => {
+            this.props.showAlert(help.t('FILE_UPLOAD_ERROR_UNKNWN'));
         };
     },
 

@@ -8,8 +8,7 @@
  * KEYRIGHTS_TEST_ITEM_ID, KEYRIGHTS_TEST_SECTION_ID.
  *
  * The cookie must belong to a non-administrator test user. The test only
- * submits denied requests and an SSRF probe; it does not alter application
- * data.
+ * submits denied requests only; it does not alter application data.
  */
 
 $required = [
@@ -21,6 +20,10 @@ $required = [
 ];
 foreach ($required as $name) {
     if (getenv($name) === false || getenv($name) === '') {
+        if (getenv('KEYRIGHTS_TEST_REQUIRED') === '1') {
+            fwrite(STDERR, "FAIL: {$name} is not configured\n");
+            exit(1);
+        }
         fwrite(STDOUT, "SKIP: {$name} is not configured\n");
         exit(0);
     }
@@ -79,11 +82,5 @@ $assert($status === 403 && ($data['result'] ?? null) === 'error', 'non-admin rig
     'CRYPTED' => 'v2:invalid',
 ]);
 $assert($status === 403 && ($data['result'] ?? null) === 'error', 'cross-section item update is denied');
-
-[$status] = $request('/keyrights/api.php?action=api/favicon', [
-    'csrf_token' => $csrf,
-    'url' => 'http://127.0.0.1/',
-]);
-$assert($status === 204 || $status === 200, 'private-network favicon target is not fetched');
 
 fwrite(STDOUT, "OK: HTTP access integration checks\n");

@@ -25,6 +25,7 @@ class User {
     ];
 
     public static function getUserListById($userIdList = []) {
+        $userIdList = array_values(array_unique(array_filter(array_map('intval', (array)$userIdList))));
         if (empty($userIdList)) {
             return [];
         }
@@ -43,8 +44,11 @@ class User {
 
     public function getUserList($params = []) {
         $bxUser = new CUser();
-        $field = !empty($params['SORT']) ? $params['SORT'] : 'ID';
-        $order = !empty($params['ORDER']) ? $params['ORDER'] : 'ASC';
+        $field = strtoupper((string)($params['SORT'] ?? 'ID'));
+        if (!in_array($field, $this->selectFields, true)) {
+            $field = 'ID';
+        }
+        $order = strtoupper((string)($params['ORDER'] ?? 'ASC')) === 'DESC' ? 'DESC' : 'ASC';
 
         $res = $bxUser->GetList($field, $order, [], [
             'FIELDS' => $this->selectFields,
@@ -95,6 +99,10 @@ class User {
     }
 
     public function getUserById($id) {
+        $id = (int)$id;
+        if ($id <= 0) {
+            return false;
+        }
         $order = "ID";
         $direction = "desc";
         $bxUser = new CUser();
@@ -103,6 +111,10 @@ class User {
             'SELECT' => ['UF_DEPARTMENT']
         ]);
         $user = $userRes->Fetch();
+
+        if (!is_array($user) || (int)$user['ID'] !== (int)$id) {
+            return false;
+        }
 
         $departmentList = $this->getDepartments();
         $user['UF_DEPARTMENT'] = $this->getAllDepartments($user['UF_DEPARTMENT'], $departmentList);

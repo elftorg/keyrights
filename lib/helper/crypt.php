@@ -22,10 +22,16 @@ class Crypt
 
     public function __construct()
     {
-        $this->key = (string)Option::get('drdroid.keyrights', 'serverPassphrase', '');
+        $keySource = (string)Option::get('drdroid.keyrights', 'serverKeySource', 'option');
+        $this->key = self::loadSecret('serverPassphrase', 'serverKeySource', 'server');
         if ($this->key === '') {
-            throw new \RuntimeException('KeyRights server passphrase is not configured');
+            throw new \RuntimeException('KeyRights server passphrase is not configured for source: ' . $keySource);
         }
+    }
+
+    public static function getClientPassphrase()
+    {
+        return self::loadSecret('clientPassphrase', 'clientKeySource', 'client');
     }
 
     public static function encrypt($string)
@@ -159,17 +165,9 @@ class Crypt
                 $this->key,
                 OPENSSL_RAW_DATA | OPENSSL_NO_PADDING
             );
-        } elseif (function_exists('mcrypt_decrypt')) {
-            $decrypted = mcrypt_decrypt(
-                MCRYPT_BLOWFISH,
-                $this->key,
-                $crypted,
-                MCRYPT_MODE_ECB,
-                $iv
-            );
         } else {
             throw new \RuntimeException(
-                'Legacy Blowfish decryptor is unavailable; install ext-mcrypt or phpseclib'
+                'Legacy Blowfish decryptor is unavailable; install phpseclib'
             );
         }
 
@@ -183,6 +181,38 @@ class Crypt
     private function deriveKey()
     {
         return hash('sha256', $this->key, true);
+    }
+
+    private static function loadSecret($optionName, $sourceOptionName, $purpose)
+    {
+        $source = (string)Option::get('drdroid.keyrights', $sourceOptionName, 'option');
+        if ($source === 'environment' && $purpose === 'server') {
+            return (string)getenv('KEYRIGHTS_SERVER_KEY');
+        }
+        if ($source !== 'bitrix-crypto') {
+            return (string)Option::get('drdroid.keyrights', $optionName, '');
+        }
+
+        $encoded = (string)Option::get('drdroid.keyrights', $optionName . 'Encrypted', '');
+        $encrypted = base64_decode($encoded, true);
+        if (!class_exists('\Bitrix\Main\ORM\Fields\CryptoField')
+            || !method_exists('\Bitrix\Main\ORM\Fields\CryptoField', 'getDefaultKey')
+            || !class_exists('\Bitrix\Main\Security\Cipher')
+        ) {
+            throw new \RuntimeException('Bitrix crypto key is unavailable for KeyRights secret storage');
+        }
+        try {
+            $cryptoKey = \Bitrix\Main\ORM\Fields\CryptoField::getDefaultKey();
+            if ($encrypted === false || !is_string($cryptoKey) || $cryptoKey === '') {
+                throw new \RuntimeException('Bitrix crypto key is unavailable for KeyRights secret storage');
+            }
+            return (new \Bitrix\Main\Security\Cipher())->decrypt(
+                $encrypted,
+                $cryptoKey . '|drdroid.keyrights|' . $purpose
+            );
+        } catch (\Throwable $exception) {
+            throw new \RuntimeException('Could not decrypt KeyRights secret storage', 0, $exception);
+        }
     }
 
     private function supportsOpenSslBlowfish()

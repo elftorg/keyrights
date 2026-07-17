@@ -9,7 +9,7 @@ $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_HEADER'] = 'Make sure the following requir
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
     '<li>MySQL/MariaDB or PostgreSQL database supported by Bitrix</li>' .
     '<li>Bitrix24 On-Premise version 20.5.400 or later</li>' .
-    '<li>PHP 8.2 or later with OpenSSL and cURL</li>' .
+    '<li>PHP 8.2 or later with OpenSSL</li>' .
     '<li>The Information Blocks module is installed</li>' .
     '<li>The urlrewrite.php file is writable</li>';
 $MESS['KEYRIGHTS_HEADER_STEP1'] = 'Installation settings';
@@ -20,12 +20,13 @@ $MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights requires a MySQL/MariaDB or 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Bitrix version 20.5.400 or later is required';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_PHP'] = 'PHP 8.2 or later is required';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_OPENSSL'] = 'The PHP OpenSSL extension is not installed';
-$MESS['KEYRIGHTS_INSTALL_REQERROR_CURL'] = 'The PHP cURL extension is not installed';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_IBLOCK'] = 'The Information Blocks module is not installed';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_REWRITE'] = 'The urlrewrite.php file is not writable';
+$MESS['KEYRIGHTS_INSTALL_LEGACY_TABLES_INCOMPLETE'] = 'An incomplete legacy KeyRights schema was found. Both sib_kr_item and sib_kr_right are required for a safe migration';
+$MESS['KEYRIGHTS_INSTALL_LEGACY_MIGRATION_ERROR'] = 'Could not migrate data from the legacy KeyRights tables';
 $MESS['KEYRIGHTS_INSTALL_PASS_LABEL'] = 'Enter the passphrase used to encrypt passwords: ';
 $MESS['KEYRIGHTS_INSTALL_PASS_ALREADY_EXISTS_REWRITE'] = 'A client passphrase already exists. Leave this field empty to keep it.';
-$MESS['KEYRIGHTS_INSTALL_PASS_EMPTY'] = 'Enter an encryption passphrase';
+$MESS['KEYRIGHTS_INSTALL_PASS_EMPTY'] = 'The encryption passphrase must contain at least 16 characters';
 $MESS['KEYRIGHTS_INSTALL_BUTTON_INSTALL'] = 'Install';
 $MESS['KEYRIGHTS_UNINSTALL'] = 'Uninstall KeyRights';
 $MESS['KEYRIGHTS_UNINSTALL_SAVE_TABLES'] = 'Keep database tables';

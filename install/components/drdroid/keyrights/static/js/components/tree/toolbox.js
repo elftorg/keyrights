@@ -90,7 +90,6 @@ const Toolbox = React.createClass({
             <div className="toolbox">
                 <div className="toolbox-actions" role="toolbar" aria-label={help.t('TOOLBOX_LABEL')}>
                     <button type="button"
-                        type="button"
                         onClick={() => addFolderPopup(activeFolder)}
                         className="tool add-folder"
                         disabled={!canEditFolder}
@@ -100,7 +99,6 @@ const Toolbox = React.createClass({
                     </button>
 
                     <button type="button"
-                        type="button"
                         onClick={newItem}
                         className="tool add-password"
                         disabled={passwordDisabled}
@@ -111,7 +109,6 @@ const Toolbox = React.createClass({
 
                 <div className={settingClasses}>
                         <button type="button"
-                            type="button"
                             onClick={() => settingsAvailable && this.setState({isSettingsOpened: !isSettingsOpened})}
                             className="tool setting"
                             disabled={!settingsAvailable}
@@ -141,7 +138,6 @@ const Toolbox = React.createClass({
                 </div>
 
                     <button type="button"
-                        type="button"
                         onClick={() => this.setState({searchIsOpened: !searchIsOpened})}
                         className={classes("tool search", {active: searchIsOpened})}
                         title={help.t('SEARCH_BY_NAME') + ' (Ctrl+F)'}

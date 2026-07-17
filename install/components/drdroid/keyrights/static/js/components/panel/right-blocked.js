@@ -3,23 +3,6 @@ const classes     = require('classnames');
 const help = require('../../helpers/helpers');
 
 const Right = React.createClass({
-    getInitialState() {
-        return {
-            isDatePickerVisible: false
-        }
-    },
-    changeTimed(d) {
-        if (moment(d).date() <= moment().date()) return false;
-
-        this.setState({isDatePickerVisible: false});
-        this.props.saveRights(this.props.right, {timed: d ? moment(d).format() : null});
-    },
-    toggleDatepicker(e, isDatePickerVisible) {
-        e.preventDefault();
-        e.stopPropagation();
-
-        this.setState({isDatePickerVisible});
-    },
     render() {
         const {item, right, saveRights, blocked} = this.props;
         const person = right.user ? item.allowedUsers[right.user] : item.allowedGroups[right.group];

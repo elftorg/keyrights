@@ -9,10 +9,10 @@
 
 @Arial:               'Arial', 'Tahoma', sans-serif;
 @Open_Sans:           'Open Sans', 'Tahoma', 'Arial', sans-serif;
-@Open_Sans_Light:     'Open Sans Light', @Open_Sans;
-@Open_Sans_Semibold:  'Open Sans Semibold', @Open_Sans;
-@Open_Sans_Bold:      'Open Sans Bold', @Open_Sans;
-@Open_Sans_Extrabold: 'Open Sans Extrabold', sans-serif;
+@Open_Sans_Light:     @Open_Sans;
+@Open_Sans_Semibold:  @Open_Sans;
+@Open_Sans_Bold:      @Open_Sans;
+@Open_Sans_Extrabold: @Open_Sans;
 
 /****
  * Миксины, разное
@@ -20,8 +20,7 @@
 
 .font-face-params (@title, @file-name,@font-weight:normal,@font-style: normal) {
     font-family: @title;
-    src: url('fonts/@{file-name}.eot');
-    src: local("?"), url('../fonts/@{file-name}.eot?#iefix') format('embedded-opentype'), url('../fonts/@{file-name}.woff') format('woff'), url('../fonts/@{file-name}.ttf') format('truetype'), url('../fonts/@{file-name}.svg#@{file-name}') format('svg');
+    src: url('../fonts/@{file-name}.woff') format('woff');
     font-weight: @font-weight;
     font-style: @font-style;
 }

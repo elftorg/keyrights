@@ -199,18 +199,15 @@ Aes.Ctr.encrypt = function(plaintext, password, nBits) {
     var key = Aes.cipher(pwBytes, Aes.keyExpansion(pwBytes));  // gives us 16-byte key
     key = key.concat(key.slice(0, nBytes-16));  // expand key to 16/24/32 bytes long
 
-    // initialise 1st 8 bytes of counter block with nonce (NIST SP800-38A §B.2): [0-1] = millisec,
-    // [2-3] = random, [4-7] = seconds, together giving full sub-millisec uniqueness up to Feb 2106
+    // Initialise the first 8 bytes with a cryptographically secure nonce.
     var counterBlock = new Array(blockSize);
-
-    var nonce = (new Date()).getTime();  // timestamp: milliseconds since 1-Jan-1970
-    var nonceMs = nonce%1000;
-    var nonceSec = Math.floor(nonce/1000);
-    var nonceRnd = Math.floor(Math.random()*0xffff);
-
-    for (i=0; i<2; i++) counterBlock[i]   = (nonceMs  >>> i*8) & 0xff;
-    for (i=0; i<2; i++) counterBlock[i+2] = (nonceRnd >>> i*8) & 0xff;
-    for (i=0; i<4; i++) counterBlock[i+4] = (nonceSec >>> i*8) & 0xff;
+    var secureCrypto = window.crypto || window.msCrypto;
+    if (!secureCrypto || typeof secureCrypto.getRandomValues !== 'function') {
+        throw new Error('Secure random number generator is unavailable');
+    }
+    var nonce = new Uint8Array(8);
+    secureCrypto.getRandomValues(nonce);
+    for (i=0; i<8; i++) counterBlock[i] = nonce[i];
 
     // and convert it to a string to go on the front of the ciphertext
     var ctrTxt = '';
@@ -245,7 +242,6 @@ Aes.Ctr.encrypt = function(plaintext, password, nBits) {
     var ciphertext = ctrTxt + ciphertxt.join('');
     ciphertext = Base64.encode(ciphertext);  // encode in base64
 
-    //alert((new Date()) - t);
     return ciphertext;
 };
 
@@ -311,7 +307,6 @@ Aes.Ctr.decrypt = function(ciphertext, password, nBits) {
     var plaintext = plaintxt.join('');
     plaintext = Utf8.decode(plaintext);  // decode from UTF8 back to Unicode multi-byte chars
 
-    //alert((new Date()) - t);
     return plaintext;
 };
 

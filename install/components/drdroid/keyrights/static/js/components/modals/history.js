@@ -66,6 +66,7 @@ const History = React.createClass({
                             <h4 className="modal-title">{help.t('HISTORY')}</h4>
                         </div>
                         <div className="modal-body">
+                            <p className="alert alert-warning">{help.t('HISTORY_SECURITY_WARNING')}</p>
 
                             { !from && !to && <p>{help.t('REPORT_CHOOSE')} <strong>{help.t('REPORT_FIRST_DAY')}</strong>.</p> }
                             { from && !to && <p>{help.t('REPORT_CHOOSE')} <strong>{help.t('REPORT_LAST_DAY')}</strong>.
