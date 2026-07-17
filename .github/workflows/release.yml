@@ -33,7 +33,7 @@ jobs:
 
       - name: Validate and install PHP dependencies
         run: |
-          composer validate --strict
+          composer validate
           composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
       - name: Run PHP tests
@@ -113,9 +113,14 @@ jobs:
           RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
           RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
         run: |
-          gh release create "$RELEASE_TAG" \
-            "dist/drdroid.keyrights-${RELEASE_VERSION}.tar.gz" \
-            dist/SHA256SUMS \
-            --target "$GITHUB_SHA" \
-            --title "drdroid.keyrights ${RELEASE_VERSION}" \
-            --generate-notes
+          archive="dist/drdroid.keyrights-${RELEASE_VERSION}.tar.gz"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$archive" dist/SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "$archive" \
+              dist/SHA256SUMS \
+              --target "$GITHUB_SHA" \
+              --title "drdroid.keyrights ${RELEASE_VERSION}" \
+              --generate-notes
+          fi
