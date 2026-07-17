@@ -1,8 +1,8 @@
 <?php return array(
     'root' => array(
         'name' => 'drdroid/keyrights',
-        'pretty_version' => '2.0.0',
-        'version' => '2.0.0.0',
+        'pretty_version' => '2.0.1',
+        'version' => '2.0.1.0',
         'reference' => null,
         'type' => 'bitrix-module',
         'install_path' => __DIR__ . '/../../',
@@ -10,6 +10,15 @@
         'dev' => false,
     ),
     'versions' => array(
+        'drdroid/keyrights' => array(
+            'pretty_version' => '2.0.1',
+            'version' => '2.0.1.0',
+            'reference' => null,
+            'type' => 'bitrix-module',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
         'paragonie/constant_time_encoding' => array(
             'pretty_version' => 'v3.1.3',
             'version' => '3.1.3.0',
@@ -34,15 +43,6 @@
             'reference' => 'db9744e6d47e742b1f974e965ad49bdd041105af',
             'type' => 'library',
             'install_path' => __DIR__ . '/../phpseclib/phpseclib',
-            'aliases' => array(),
-            'dev_requirement' => false,
-        ),
-        'drdroid/keyrights' => array(
-            'pretty_version' => '2.0.0',
-            'version' => '2.0.0.0',
-            'reference' => null,
-            'type' => 'bitrix-module',
-            'install_path' => __DIR__ . '/../../',
             'aliases' => array(),
             'dev_requirement' => false,
         ),
