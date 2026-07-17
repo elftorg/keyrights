@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Версия из install/version.php, например 2.0.1'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish module release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: curl, openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Validate and install PHP dependencies
+        run: |
+          composer validate
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Run PHP tests
+        run: composer test
+
+      - name: Check PHP syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          find . -path './vendor' -prune -o -type f \( -name '*.php' -o -name '*.phtml' \) -print0 |
+            xargs -0 -n1 php -l
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.19'
+          cache: npm
+          cache-dependency-path: install/components/drdroid/keyrights/package-lock.json
+
+      - name: Build frontend
+        working-directory: install/components/drdroid/keyrights
+        run: |
+          npm ci --legacy-peer-deps
+          npm audit --omit=dev
+          npm run build
+
+      - name: Resolve and validate release version
+        id: metadata
+        shell: bash
+        env:
+          MANUAL_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          module_version="$(php -r 'include "install/version.php"; echo $arModuleVersion["VERSION"];')"
+          composer_version="$(php -r '$data = json_decode(file_get_contents("composer.json"), true); echo $data["version"];')"
+          frontend_version="$(node -p "require('./install/components/drdroid/keyrights/package.json').version")"
+          lock_version="$(node -p "require('./install/components/drdroid/keyrights/package-lock.json').packages[''].version")"
+
+          for metadata_version in "$composer_version" "$frontend_version" "$lock_version"; do
+            if [[ "$metadata_version" != "$module_version" ]]; then
+              echo "ERROR: version metadata does not match install/version.php ($module_version)" >&2
+              exit 1
+            fi
+          done
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+            tag_version="${tag#v}"
+            if [[ "$tag" != "v$module_version" || "$tag_version" != "$module_version" ]]; then
+              echo "ERROR: tag $tag does not match module version $module_version" >&2
+              exit 1
+            fi
+          elif [[ -z "$MANUAL_VERSION" || "$MANUAL_VERSION" != "$module_version" ]]; then
+            echo "ERROR: workflow_dispatch version must match module version $module_version" >&2
+            exit 1
+          fi
+
+          echo "version=$module_version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$module_version" >> "$GITHUB_OUTPUT"
+
+      - name: Build and verify installation archive
+        run: ./scripts/build-release.sh '${{ steps.metadata.outputs.version }}'
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: drdroid.keyrights-${{ steps.metadata.outputs.version }}
+          path: |
+            dist/drdroid.keyrights-${{ steps.metadata.outputs.version }}.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.metadata.outputs.version }}
+        run: |
+          archive="dist/drdroid.keyrights-${RELEASE_VERSION}.tar.gz"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$archive" dist/SHA256SUMS --clobber
+          else
+            gh release create "$RELEASE_TAG" \
+              "$archive" \
+              dist/SHA256SUMS \
+              --target "$GITHUB_SHA" \
+              --title "drdroid.keyrights ${RELEASE_VERSION}" \
+              --generate-notes
+          fi

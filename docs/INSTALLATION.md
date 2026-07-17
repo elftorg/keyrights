@@ -2,8 +2,26 @@
 
 ## Чистая установка
 
-Распакуйте `release/drdroid.keyrights-2.0.0.tar.gz` в `/bitrix/modules/`.
-После этого установите модуль через административный интерфейс Bitrix24.
+1. Скачайте из нужного [GitHub Release](https://github.com/elftorg/keyrights/releases)
+   два assets: `drdroid.keyrights-<версия>.tar.gz` и `SHA256SUMS`. Архивы
+   `Source code` для установки не подходят.
+2. Проверьте архив:
+
+   ```bash
+   sha256sum -c SHA256SUMS
+   ```
+
+3. Распакуйте его в `/bitrix/modules/`:
+
+   ```bash
+   tar -xzf drdroid.keyrights-<версия>.tar.gz -C /bitrix/modules/
+   ```
+
+   В архиве уже есть корневая папка `drdroid.keyrights/`, поэтому результатом
+   должен быть путь `/bitrix/modules/drdroid.keyrights/`. Не создавайте второй
+   уровень `drdroid.keyrights/drdroid.keyrights/`.
+4. В административной части Bitrix24 откройте Marketplace → Установленные
+   решения (список модулей), выберите `drdroid.keyrights` и нажмите «Установить».
 
 Установщик проверяет PHP, Bitrix и обязательные расширения, создаёт служебные
 таблицы, регистрирует обработчики событий и копирует компонент.
