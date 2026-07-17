@@ -361,6 +361,7 @@ class drdroid_keyrights extends CModule {
 
     public function checkRequirements() {
         $arErrors = array();
+        $arWarnings = array();
         $arStatus = array();
 
         $dbType = $this->getDatabaseType();
@@ -414,8 +415,14 @@ class drdroid_keyrights extends CModule {
             $arStatus[] = "ok";
         }
 
-        if (!$this->checkFilesystemPreflight()) {
-            $arErrors["filesystem"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_FILESYSTEM");
+        $filesystemCheck = $this->checkFilesystemPreflight();
+        foreach ($filesystemCheck['errors'] as $index => $error) {
+            $arErrors['filesystem_' . $index] = $error;
+        }
+        foreach ($filesystemCheck['warnings'] as $index => $warning) {
+            $arWarnings['filesystem_' . $index] = $warning;
+        }
+        if (count($filesystemCheck['errors']) > 0) {
             $arStatus[] = "err";
         } else {
             $arStatus[] = "ok";
@@ -423,6 +430,7 @@ class drdroid_keyrights extends CModule {
 
         return array(
             "errors" => $arErrors,
+            "warnings" => $arWarnings,
             "status" => $arStatus
         );
     }
@@ -453,63 +461,322 @@ class drdroid_keyrights extends CModule {
     }
 
     private function checkFilesystemPreflight() {
+        $result = array('errors' => array(), 'warnings' => array());
         if (!defined('SITE_ID') || SITE_ID === '') {
-            return false;
+            $this->addPreflightMessage($result['errors'], GetMessage('KEYRIGHTS_INSTALL_REQERROR_SITE_ID'));
+            return $result;
         }
-        $docRoot = (string)\CSite::GetSiteDocRoot(SITE_ID);
+        $docRoot = $this->normalizeFilesystemPath((string)\CSite::GetSiteDocRoot(SITE_ID));
         if ($docRoot === '' || !is_dir($docRoot)) {
-            return false;
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DOCROOT', array('#PATH#' => $docRoot))
+            );
+            return $result;
         }
 
         $siteResult = \CSite::GetList($sort = "sort", $order = "desc", array("LID" => SITE_ID));
         $site = $siteResult->Fetch();
         if (!$site) {
-            return false;
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_SITE', array('#SITE_ID#' => (string)SITE_ID))
+            );
+            return $result;
         }
         $siteDir = !empty($site["DIR"]) ? $site["DIR"] : "/";
 
-        $requiredSources = array(
+        $requiredFiles = array(
             __DIR__ . '/frontend/index.php',
             __DIR__ . '/frontend/api.php',
             __DIR__ . '/components/drdroid/keyrights/component.php',
+            __DIR__ . '/components/drdroid/keyrights/.description.php',
+            __DIR__ . '/components/drdroid/keyrights/.parameters.php',
             __DIR__ . '/db/' . $this->getDatabaseType() . '/install.sql',
             dirname(__DIR__) . '/include.php',
             dirname(__DIR__) . '/vendor/autoload.php',
         );
-        foreach ($requiredSources as $source) {
-            if (!is_file($source) || !is_readable($source)) {
-                return false;
-            }
+        foreach ($requiredFiles as $source) {
+            $this->checkReadableSource($source, false, $result);
         }
 
-        $writableTargets = array(
-            $docRoot . '/urlrewrite.php',
-            $docRoot . '/' . trim($this->PUBLIC_DIR, '/'),
-            $docRoot . '/bitrix/components/drdroid/keyrights',
-            $docRoot . '/' . trim($siteDir, '/') . '/.left.menu.php',
+        $requiredTrees = array(
+            __DIR__ . '/frontend',
+            __DIR__ . '/components/drdroid/keyrights/lang',
+            __DIR__ . '/components/drdroid/keyrights/templates',
+            __DIR__ . '/components/drdroid/keyrights/static',
         );
-        foreach ($writableTargets as $target) {
-            if (!$this->isWritableTarget($target)) {
-                return false;
-            }
+        foreach ($requiredTrees as $source) {
+            $this->checkReadableSource($source, true, $result);
         }
-        return true;
+
+        $publicTarget = $this->normalizeFilesystemPath($docRoot . '/' . trim($this->PUBLIC_DIR, '/'));
+        $componentSource = __DIR__ . '/components/drdroid/keyrights';
+        $componentTarget = $this->normalizeFilesystemPath($docRoot . '/bitrix/components/drdroid/keyrights');
+        $copyTargets = array(
+            array(__DIR__ . '/frontend', $publicTarget),
+            array($componentSource . '/lang', $componentTarget . '/lang'),
+            array($componentSource . '/templates', $componentTarget . '/templates'),
+            array($componentSource . '/static', $componentTarget . '/static'),
+        );
+        foreach ($copyTargets as $copyTarget) {
+            $this->checkCopyTargetPreflight($copyTarget[0], $copyTarget[1], $result);
+        }
+
+        foreach (array('.description.php', '.parameters.php', 'component.php') as $componentFile) {
+            $this->checkFileTargetPreflight($componentTarget . '/' . $componentFile, $result);
+        }
+
+        $this->checkFileTargetPreflight($docRoot . '/urlrewrite.php', $result);
+        $menuFile = $this->normalizeFilesystemPath(
+            $docRoot . '/' . trim((string)$siteDir, '/') . '/.left.menu.php'
+        );
+        $this->checkFileTargetPreflight($menuFile, $result);
+
+        return $result;
     }
 
-    private function isWritableTarget($path) {
-        $path = preg_replace('#/+#', '/', (string)$path);
-        if (file_exists($path)) {
-            return is_writable($path);
+    private function checkReadableSource($path, $directory, &$result) {
+        $path = $this->normalizeFilesystemPath($path);
+        $exists = $directory ? is_dir($path) : is_file($path);
+        if (!$exists) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_SOURCE_MISSING', array('#PATH#' => $path))
+            );
+            return;
         }
-        $parent = dirname($path);
+
+        if (!is_readable($path)) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_SOURCE_UNREADABLE', array('#PATH#' => $path))
+            );
+            return;
+        }
+
+        if (!$directory) {
+            return;
+        }
+
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($path, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
+            foreach ($iterator as $entry) {
+                if (!$entry->isReadable()) {
+                    $this->addPreflightMessage(
+                        $result['errors'],
+                        $this->formatInstallMessage(
+                            'KEYRIGHTS_INSTALL_REQERROR_SOURCE_UNREADABLE',
+                            array('#PATH#' => $this->normalizeFilesystemPath($entry->getPathname()))
+                        )
+                    );
+                }
+            }
+        } catch (\UnexpectedValueException $exception) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_SOURCE_UNREADABLE', array('#PATH#' => $path))
+            );
+        }
+    }
+
+    private function checkCopyTargetPreflight($source, $target, &$result) {
+        if (!is_dir($source)) {
+            return;
+        }
+        $source = $this->normalizeFilesystemPath($source);
+        $target = $this->normalizeFilesystemPath($target);
+        $this->checkDirectoryTargetPreflight($target, $result);
+
+        try {
+            $iterator = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($source, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::SELF_FIRST
+            );
+            foreach ($iterator as $entry) {
+                $relativePath = substr($this->normalizeFilesystemPath($entry->getPathname()), strlen($source) + 1);
+                $destination = $target . '/' . $relativePath;
+                if ($entry->isDir()) {
+                    $this->checkDirectoryTargetPreflight($destination, $result);
+                } elseif (file_exists($destination)) {
+                    $this->checkExistingWritableFile($destination, $result);
+                }
+            }
+        } catch (\UnexpectedValueException $exception) {
+            // Source readability is reported separately by checkReadableSource().
+        }
+    }
+
+    private function checkDirectoryTargetPreflight($path, &$result) {
+        $path = $this->normalizeFilesystemPath($path);
+        if (file_exists($path)) {
+            if (!is_dir($path)) {
+                $this->addPreflightMessage(
+                    $result['errors'],
+                    $this->formatInstallMessage(
+                        'KEYRIGHTS_INSTALL_REQERROR_TARGET_CONFLICT',
+                        array('#PATH#' => $path, '#TYPE#' => GetMessage('KEYRIGHTS_INSTALL_FS_TYPE_DIRECTORY'))
+                    )
+                );
+                return;
+            }
+            $this->probeWritableDirectory($path, true, $result);
+            return;
+        }
+
+        $this->probeTargetParent($path, true, $result);
+    }
+
+    private function checkFileTargetPreflight($path, &$result) {
+        $path = $this->normalizeFilesystemPath($path);
+        if (file_exists($path)) {
+            if (!is_file($path)) {
+                $this->addPreflightMessage(
+                    $result['errors'],
+                    $this->formatInstallMessage(
+                        'KEYRIGHTS_INSTALL_REQERROR_TARGET_CONFLICT',
+                        array('#PATH#' => $path, '#TYPE#' => GetMessage('KEYRIGHTS_INSTALL_FS_TYPE_FILE'))
+                    )
+                );
+                return;
+            }
+            $this->checkExistingWritableFile($path, $result);
+            return;
+        }
+
+        // Missing files, including .left.menu.php, are created by Bitrix.
+        // Only the actual ability to create a file in their parent is tested.
+        $this->probeTargetParent($path, false, $result);
+    }
+
+    private function checkExistingWritableFile($path, &$result) {
+        $path = $this->normalizeFilesystemPath($path);
+        $handle = @fopen($path, 'r+b');
+        if ($handle === false) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_FILE_WRITE', array('#PATH#' => $path))
+            );
+            return;
+        }
+        fclose($handle);
+    }
+
+    private function probeTargetParent($target, $needsDirectoryCreation, &$result) {
+        $target = $this->normalizeFilesystemPath($target);
+        $parent = dirname($target);
         while (!file_exists($parent)) {
             $next = dirname($parent);
             if ($next === $parent) {
-                return false;
+                $this->addPreflightMessage(
+                    $result['errors'],
+                    $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_TARGET_PARENT', array('#PATH#' => $target))
+                );
+                return;
             }
             $parent = $next;
         }
-        return is_dir($parent) && is_writable($parent);
+        if (!is_dir($parent)) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage(
+                    'KEYRIGHTS_INSTALL_REQERROR_TARGET_PARENT_CONFLICT',
+                    array('#PATH#' => $target, '#PARENT#' => $this->normalizeFilesystemPath($parent))
+                )
+            );
+            return;
+        }
+        $this->probeWritableDirectory($this->normalizeFilesystemPath($parent), $needsDirectoryCreation, $result);
+    }
+
+    private function probeWritableDirectory($directory, $probeSubdirectory, &$result) {
+        $directory = $this->normalizeFilesystemPath($directory);
+        $token = bin2hex(random_bytes(8));
+        $probeFile = $directory . '/.dr_kr_preflight_' . $token;
+        $payload = 'keyrights-preflight-' . $token;
+        $handle = @fopen($probeFile, 'x+b');
+        if ($handle === false) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_CREATE_FILE', array('#PATH#' => $directory))
+            );
+            return;
+        }
+
+        $written = @fwrite($handle, $payload);
+        $flushed = @fflush($handle);
+        fclose($handle);
+        if ($written !== strlen($payload) || !$flushed) {
+            @unlink($probeFile);
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_WRITE_FILE', array('#PATH#' => $directory))
+            );
+            return;
+        }
+        if (@file_get_contents($probeFile) !== $payload) {
+            @unlink($probeFile);
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_READ_FILE', array('#PATH#' => $directory))
+            );
+            return;
+        }
+        if (!@chmod($probeFile, 0600)) {
+            $this->addPreflightMessage(
+                $result['warnings'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQWARNING_CHMOD_FILE', array('#PATH#' => $directory))
+            );
+        }
+        if (!@unlink($probeFile)) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_DELETE_FILE', array('#PATH#' => $directory))
+            );
+            return;
+        }
+
+        if (!$probeSubdirectory) {
+            return;
+        }
+        $probeDirectory = $directory . '/.dr_kr_preflight_dir_' . $token;
+        if (!@mkdir($probeDirectory, 0700)) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_CREATE_DIRECTORY', array('#PATH#' => $directory))
+            );
+            return;
+        }
+        if (!@chmod($probeDirectory, 0700)) {
+            $this->addPreflightMessage(
+                $result['warnings'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQWARNING_CHMOD_DIRECTORY', array('#PATH#' => $directory))
+            );
+        }
+        if (!@rmdir($probeDirectory)) {
+            $this->addPreflightMessage(
+                $result['errors'],
+                $this->formatInstallMessage('KEYRIGHTS_INSTALL_REQERROR_DIR_DELETE_DIRECTORY', array('#PATH#' => $directory))
+            );
+        }
+    }
+
+    private function addPreflightMessage(&$messages, $message) {
+        $message = trim((string)$message);
+        if ($message !== '' && !in_array($message, $messages, true)) {
+            $messages[] = $message;
+        }
+    }
+
+    private function formatInstallMessage($code, $replacements) {
+        return strtr((string)GetMessage($code), $replacements);
+    }
+
+    private function normalizeFilesystemPath($path) {
+        return preg_replace('#/+#', '/', str_replace('\\', '/', (string)$path));
     }
 
     public function installRewrite() {

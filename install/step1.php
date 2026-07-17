@@ -2,6 +2,13 @@
 global $reqCheck, $APPLICATION;
 $reqCheck = is_array($reqCheck) ? $reqCheck : array();
 $reqCheck['errors'] = isset($reqCheck['errors']) && is_array($reqCheck['errors']) ? $reqCheck['errors'] : array();
+$reqCheck['warnings'] = isset($reqCheck['warnings']) && is_array($reqCheck['warnings']) ? $reqCheck['warnings'] : array();
+$reqCheck['errors'] = array_map(function ($error) {
+    return htmlspecialcharsbx((string)$error);
+}, $reqCheck['errors']);
+$reqCheck['warnings'] = array_map(function ($warning) {
+    return htmlspecialcharsbx((string)$warning);
+}, $reqCheck['warnings']);
 $reqCheck['status'] = isset($reqCheck['status']) && is_array($reqCheck['status']) ? $reqCheck['status'] : array();
 $reqStatus = array_values(array_filter($reqCheck['status'], function ($status) {
     return $status === 'ok' || $status === 'err';
@@ -83,6 +90,18 @@ $hasExistingClientKey = \COption::GetOptionString('drdroid.keyrights', 'clientPa
                     </td>
                 <?php  } ?>
             </tr>
+            <?php if (count($reqCheck['warnings'])) { ?>
+                <tr>
+                    <td style="padding-top:15px;font:normal 12px/18px Arial,sans-serif;color:#8a6000;">
+                        <strong><?= GetMessage('KEYRIGHTS_INSTALL_REQUIREMENTS_WARNING') ?></strong>
+                        <ul style="margin:8px 0 0;padding-left:20px;">
+                            <?php foreach ($reqCheck['warnings'] as $warning) { ?>
+                                <li><?= $warning ?></li>
+                            <?php } ?>
+                        </ul>
+                    </td>
+                </tr>
+            <?php } ?>
         </table>
 
 

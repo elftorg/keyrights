@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6c035cac2ebaced9957feb9cb5445276",
+    "content-hash": "07efff2cd54c48307c7ef551f0df47bd",
     "packages": [
         {
             "name": "paragonie/constant_time_encoding",
