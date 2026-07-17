@@ -25,7 +25,7 @@
 - PHP 8.2 или новее;
 - Bitrix24 On-Premise 20.5.400 или новее;
 - расширение OpenSSL;
-- MySQL/MariaDB с поддержкой InnoDB;
+- MySQL/MariaDB или PostgreSQL, поддерживаемые вашей версией Bitrix24;
 - Composer 2 для разработки и обновления зависимостей.
 
 ## Установка

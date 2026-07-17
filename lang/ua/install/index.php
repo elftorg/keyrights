@@ -7,7 +7,7 @@ $MESS['KEYRIGHTS_INSTALL_PROCESS_TITLE'] = 'Встановлення KeyRights';
 $MESS['KEYRIGHTS_INSTALL_PROCESS_DESCRIPTION'] = 'Залишився один крок до завершення встановлення KeyRights';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_HEADER'] = 'Переконайтеся, що виконано такі вимоги:';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
-    '<li>База даних MySQL</li>' .
+    '<li>База даних MySQL/MariaDB або PostgreSQL, що підтримується Бітрікс</li>' .
     '<li>Коробковий Бітрікс24 версії 20.5.400 або новішої</li>' .
     '<li>PHP 8.2 або новіший із розширеннями OpenSSL і cURL</li>' .
     '<li>Встановлено модуль «Інформаційні блоки»</li>' .
@@ -16,7 +16,7 @@ $MESS['KEYRIGHTS_HEADER_STEP1'] = 'Параметри встановлення';
 $MESS['KEYRIGHTS_LICENSE_STEP1'] = 'Я прочитав ліцензійну угоду та погоджуюся з нею';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_ERROR'] = 'Мінімальні системні вимоги не виконано';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_REPAIR'] = 'Усуньте зазначені проблеми та повторіть встановлення';
-$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights можна встановити лише з базою даних MySQL';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights потребує базу даних MySQL/MariaDB або PostgreSQL';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Потрібен Бітрікс версії 20.5.400 або новішої';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_PHP'] = 'Потрібен PHP 8.2 або новіший';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_OPENSSL'] = 'Не встановлено розширення PHP OpenSSL';

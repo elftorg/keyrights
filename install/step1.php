@@ -1,4 +1,9 @@
-<?php global $reqCheck, $APPLICATION; ?>
+<?php
+global $reqCheck, $APPLICATION;
+$reqCheck = is_array($reqCheck) ? $reqCheck : array();
+$reqCheck['errors'] = isset($reqCheck['errors']) && is_array($reqCheck['errors']) ? $reqCheck['errors'] : array();
+$reqCheck['status'] = isset($reqCheck['status']) && is_array($reqCheck['status']) ? $reqCheck['status'] : array();
+?>
 <script src="//ajax.googleapis.com/ajax/libs/jquery/1.7.2/jquery.min.js"></script>
 <div class="keyrightsBlock">
     <form action="<?= $APPLICATION->GetCurPage()?>" method="post">

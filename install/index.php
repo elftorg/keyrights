@@ -35,6 +35,8 @@ class drdroid_keyrights extends CModule {
         }
 
         $reqCheck = $this->checkRequirements();
+        // step1.php is included by Bitrix in the global scope.
+        $GLOBALS["reqCheck"] = is_array($reqCheck) ? $reqCheck : array();
         $step = (int)($_REQUEST["step"] ?? 0);
 
         if ($step == 0 || count($reqCheck["errors"]) > 0) {
@@ -50,7 +52,10 @@ class drdroid_keyrights extends CModule {
                 if (empty($serverPass)) {
                     $option->SetOptionString($this->MODULE_ID, "serverPassphrase", randString(50));
                 }
-                $this->InstallDB();
+                if (!$this->InstallDB()) {
+                    $GLOBALS["errors"] = $this->_1633177470;
+                    return false;
+                }
                 $this->InstallIblocks();
                 $this->installFiles();
                 $this->installRewrite();
@@ -69,9 +74,11 @@ class drdroid_keyrights extends CModule {
         global $DB, $APPLICATION;
         $this->_1633177470 = false;
 
-        $tableResult = $DB->Query("SHOW TABLES LIKE 'sib_kr_item'", true);
-        if (!$tableResult || !$tableResult->Fetch()) {
-            $sqlFile = $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/db/" . strtolower($DB->type) . "/install.sql";
+        $dbType = $this->getDatabaseType();
+        if (!in_array($dbType, array("mysql", "pgsql"), true)) {
+            $this->_1633177470 = array(GetMessage("KEYRIGHTS_INSTALL_REQERROR_DB"));
+        } elseif (!$this->tableExists("sib_kr_item") || !$this->tableExists("sib_kr_right")) {
+            $sqlFile = $_SERVER["DOCUMENT_ROOT"] . "/bitrix/modules/drdroid.keyrights/install/db/" . $dbType . "/install.sql";
             $sqlFile = str_replace("//", "/", $sqlFile);
             $this->_1633177470 = $this->RunSQLBatch($sqlFile);
         }
@@ -265,7 +272,7 @@ class drdroid_keyrights extends CModule {
         $arErrors = array();
         $arStatus = array();
 
-        if (empty($DB->type) || (strtolower($DB->type) !== "mysql")) {
+        if (!in_array($this->getDatabaseType(), array("mysql", "pgsql"), true)) {
             $arErrors["db"] = GetMessage("KEYRIGHTS_INSTALL_REQERROR_DB");
             $arStatus[] = "err";
         } else {
@@ -420,6 +427,11 @@ class drdroid_keyrights extends CModule {
             }
             fclose($handle);
             $arQueries = $DB->ParseSqlBatch($content, $bReturnQuery);
+            if ($arQueries === false || $arQueries === null) {
+                $arQueries = array();
+            } elseif (!is_array($arQueries)) {
+                $arQueries = array($arQueries);
+            }
             for ($i = 0; $i < count($arQueries); $i++) {
                 if ($bReturnQuery) {
                     $arErrors[] = $arQueries[$i];
@@ -439,9 +451,10 @@ class drdroid_keyrights extends CModule {
 
     public function UnInstallDB() {
         global $DB;
-        $tables = array("kr_item", "kr_right");
+        $tables = array("sib_kr_right", "sib_kr_item");
+        $cascade = $this->getDatabaseType() === "pgsql" ? " CASCADE" : "";
         foreach ($tables as $table) {
-            $sql = "DROP TABLE IF EXISTS `sib_" . $table . "`;";
+            $sql = "DROP TABLE IF EXISTS " . $this->quoteIdentifier($table) . $cascade . ";";
             $DB->Query($sql);
         }
         return true;
@@ -451,52 +464,82 @@ class drdroid_keyrights extends CModule {
         global $DB;
         $errors = [];
         $indexes = [
-            ['sib_kr_item', 'ux_sib_kr_item_entity', 'UNIQUE KEY `ux_sib_kr_item_entity` (`entity_id`)'],
-            ['sib_kr_item', 'ux_sib_kr_item_section', 'UNIQUE KEY `ux_sib_kr_item_section` (`section_id`)'],
-            ['sib_kr_item', 'ix_sib_kr_item_owner', 'KEY `ix_sib_kr_item_owner` (`owner`)'],
-            ['sib_kr_right', 'ix_sib_kr_right_user', 'KEY `ix_sib_kr_right_user` (`user`)'],
-            ['sib_kr_right', 'ix_sib_kr_right_group', 'KEY `ix_sib_kr_right_group` (`group`)'],
-            ['sib_kr_right', 'ix_sib_kr_right_timed', 'KEY `ix_sib_kr_right_timed` (`timed`)'],
-        ];
-        $legacyIndexes = [
-            'ux_sib_kr_item_entity' => ['sib_kr_item', 'entity_id'],
-            'ux_sib_kr_item_section' => ['sib_kr_item', 'section_id'],
+            array('sib_kr_item', 'ux_sib_kr_item_entity', array('entity_id'), true),
+            array('sib_kr_item', 'ux_sib_kr_item_section', array('section_id'), true),
+            array('sib_kr_item', 'ix_sib_kr_item_owner', array('owner'), false),
+            array('sib_kr_right', 'ix_sib_kr_right_item_id', array('item_id'), false),
+            array('sib_kr_right', 'ix_sib_kr_right_user', array('user'), false),
+            array('sib_kr_right', 'ix_sib_kr_right_group', array('group'), false),
+            array('sib_kr_right', 'ix_sib_kr_right_timed', array('timed'), false),
         ];
 
-        foreach ($indexes as [$table, $index, $definition]) {
-            $exists = $DB->Query(
-                "SHOW INDEX FROM `{$table}` WHERE Key_name = '" . $DB->ForSql($index) . "'",
-                true
-            );
-            if ($exists && $exists->Fetch()) {
+        foreach ($indexes as $indexDefinition) {
+            list($table, $index, $columns, $unique) = $indexDefinition;
+            if ($this->indexExists($table, $columns)) {
                 continue;
             }
-            if (isset($legacyIndexes[$index])) {
-                [$legacyTable, $legacyName] = $legacyIndexes[$index];
-                $legacy = $DB->Query(
-                    "SHOW INDEX FROM `{$legacyTable}` WHERE Key_name = '" . $DB->ForSql($legacyName) . "'",
-                    true
-                );
-                if ($legacy && $legacy->Fetch()) {
-                    $DB->Query("ALTER TABLE `{$legacyTable}` DROP INDEX `{$legacyName}`", true);
-                }
-            }
-            if (!$DB->Query("ALTER TABLE `{$table}` ADD {$definition}", true)) {
+            $quotedColumns = array_map(function ($column) {
+                return $this->quoteIdentifier($column);
+            }, $columns);
+            $sql = "CREATE " . ($unique ? "UNIQUE " : "") . "INDEX " .
+                $this->quoteIdentifier($index) . " ON " . $this->quoteIdentifier($table) .
+                " (" . implode(", ", $quotedColumns) . ")";
+            if (!$DB->Query($sql, true)) {
                 $errors[] = $DB->GetErrorMessage();
             }
         }
 
-        $createResult = $DB->Query("SHOW CREATE TABLE `sib_kr_right`", true);
-        $create = $createResult ? $createResult->Fetch() : false;
-        $createSql = is_array($create) ? implode(' ', $create) : '';
-        if (stripos($createSql, 'fk_sib_kr_right_item') === false) {
-            $sql = "ALTER TABLE `sib_kr_right` ADD CONSTRAINT `fk_sib_kr_right_item` " .
-                "FOREIGN KEY (`item_id`) REFERENCES `sib_kr_item` (`id`) ON DELETE CASCADE";
+        if (!$this->foreignKeyExists("sib_kr_right", "fk_sib_kr_right_item")) {
+            $sql = "ALTER TABLE " . $this->quoteIdentifier("sib_kr_right") .
+                " ADD CONSTRAINT " . $this->quoteIdentifier("fk_sib_kr_right_item") .
+                " FOREIGN KEY (" . $this->quoteIdentifier("item_id") . ") REFERENCES " .
+                $this->quoteIdentifier("sib_kr_item") . " (" . $this->quoteIdentifier("id") . ") ON DELETE CASCADE";
             if (!$DB->Query($sql, true)) {
                 $errors[] = $DB->GetErrorMessage();
             }
         }
 
         return empty($errors) ? false : $errors;
+    }
+
+    private function getDatabaseType() {
+        global $DB;
+        return strtolower((string)($DB->type ?? ""));
+    }
+
+    private function quoteIdentifier($identifier) {
+        global $DB;
+        if (method_exists($DB, "quote")) {
+            return $DB->quote($identifier);
+        }
+        return "`" . str_replace("`", "", $identifier) . "`";
+    }
+
+    private function tableExists($table) {
+        global $DB;
+        return method_exists($DB, "TableExists") && $DB->TableExists($table);
+    }
+
+    private function indexExists($table, array $columns) {
+        global $DB;
+        return method_exists($DB, "IndexExists") && $DB->IndexExists($table, $columns, true);
+    }
+
+    private function foreignKeyExists($table, $constraint) {
+        global $DB;
+        $dbType = $this->getDatabaseType();
+        $table = $DB->ForSql($table);
+        $constraint = $DB->ForSql($constraint);
+        if ($dbType === "pgsql") {
+            $sql = "SELECT 1 FROM pg_constraint c " .
+                "INNER JOIN pg_class t ON t.oid = c.conrelid " .
+                "WHERE t.relname = '{$table}' AND c.conname = '{$constraint}'";
+        } else {
+            $sql = "SELECT 1 FROM information_schema.TABLE_CONSTRAINTS " .
+                "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = '{$table}' " .
+                "AND CONSTRAINT_NAME = '{$constraint}'";
+        }
+        $result = $DB->Query($sql, true);
+        return $result && $result->Fetch();
     }
 }

@@ -7,7 +7,7 @@ $MESS['KEYRIGHTS_INSTALL_PROCESS_TITLE'] = 'Install KeyRights';
 $MESS['KEYRIGHTS_INSTALL_PROCESS_DESCRIPTION'] = 'You are one step away from completing the KeyRights installation';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_HEADER'] = 'Make sure the following requirements are met:';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
-    '<li>MySQL database</li>' .
+    '<li>MySQL/MariaDB or PostgreSQL database supported by Bitrix</li>' .
     '<li>Bitrix24 On-Premise version 20.5.400 or later</li>' .
     '<li>PHP 8.2 or later with OpenSSL and cURL</li>' .
     '<li>The Information Blocks module is installed</li>' .
@@ -16,7 +16,7 @@ $MESS['KEYRIGHTS_HEADER_STEP1'] = 'Installation settings';
 $MESS['KEYRIGHTS_LICENSE_STEP1'] = 'I have read and accept the license agreement';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_ERROR'] = 'Minimum system requirements are not met';
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_REPAIR'] = 'Resolve the listed issues and run the installation again';
-$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights can only be installed with a MySQL database';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'KeyRights requires a MySQL/MariaDB or PostgreSQL database';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Bitrix version 20.5.400 or later is required';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_PHP'] = 'PHP 8.2 or later is required';
 $MESS['KEYRIGHTS_INSTALL_REQERROR_OPENSSL'] = 'The PHP OpenSSL extension is not installed';
