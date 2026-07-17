@@ -13,7 +13,7 @@ $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_HEADER'] = 'Для корректной р
 
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS'] =
 
-    "<li>БД MySQL</li>" .
+    "<li>БД MySQL/MariaDB или PostgreSQL, поддерживаемая Битрикс</li>" .
 
     "<li><b>Битрикс версии 20.5.400</b> и выше;</li>" .
 
@@ -33,7 +33,7 @@ $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_ERROR'] = "Не удовлетворены
 
 $MESS['KEYRIGHTS_INSTALL_REQUIREMENTS_REPAIR'] = "Пожалуйста, устраните перечисленные замечания, и попробуйте повторить установку";
 
-$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'Установка KeyRights возможна только на БД MySQL';
+$MESS['KEYRIGHTS_INSTALL_REQERROR_DB'] = 'Установка KeyRights возможна только на MySQL/MariaDB или PostgreSQL';
 
 $MESS['KEYRIGHTS_INSTALL_REQERROR_BX'] = 'Требуется Битрикс, версии 20.5.400 и выше';
 
