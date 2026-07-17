@@ -11,6 +11,7 @@ use Drdroid\Keyrights\Orm\RightTable;
 
 class CKeyrights {
     private $_params;
+    private $baseUrl = '/keyrights';
 
     const MODULE_ID = "drdroid.keyrights";
 
@@ -46,7 +47,8 @@ class CKeyrights {
         if (empty($path)) {
             $path = strlen($_SERVER['PHP_SELF']) < strlen($_SERVER['SCRIPT_NAME']) ? $_SERVER['PHP_SELF'] : $_SERVER['SCRIPT_NAME'];
         }
-        defined("KEYRIGHTS_BASE_URL") || define("KEYRIGHTS_BASE_URL", dirname($path));
+        $baseUrl = rtrim(str_replace('\\', '/', dirname($path)), '/');
+        $this->baseUrl = $baseUrl !== '' && $baseUrl !== '.' ? $baseUrl : '/';
 
         // Get relative route. A dedicated endpoint may pass it explicitly so
         // routing does not require mutation of request-wide server variables.
@@ -54,9 +56,14 @@ class CKeyrights {
             $route = trim((string)$this->_params['ROUTE'], '/');
         } else {
             $requestUri = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '/';
-            $route = trim(str_replace(KEYRIGHTS_BASE_URL, '', $requestUri), '/');
-            $route = explode('?', $route)[0]; // remove query string
-            $route = rtrim($route, '/'); // normalize trailing slash
+            $requestPath = parse_url($requestUri, PHP_URL_PATH);
+            $requestPath = is_string($requestPath) ? $requestPath : '/';
+            if ($this->baseUrl !== '/'
+                && ($requestPath === $this->baseUrl || strpos($requestPath, $this->baseUrl . '/') === 0)
+            ) {
+                $requestPath = substr($requestPath, strlen($this->baseUrl));
+            }
+            $route = trim($requestPath, '/');
         }
 
         // Check if this is an API call
@@ -108,7 +115,7 @@ class CKeyrights {
     private function renderLayout() {
         global $APPLICATION, $USER;
         if (!is_object($USER) || !$USER->IsAuthorized()) {
-            LocalRedirect('/auth/?backurl=' . urlencode($_SERVER['REQUEST_URI']));
+            LocalRedirect('/auth/?backurl=' . urlencode($this->getSafeBackUrl()));
             die();
         }
 
@@ -155,7 +162,7 @@ class CKeyrights {
         $keySaltJson = json_encode($keySalt, $jsonFlags);
         $sessId = bitrix_sessid();
         $sessIdJson = json_encode($sessId, $jsonFlags);
-        $baseUrlJson = json_encode(rtrim(KEYRIGHTS_BASE_URL, '/') . '/', $jsonFlags);
+        $baseUrlJson = json_encode(rtrim($this->baseUrl, '/') . '/', $jsonFlags);
         $isAdmin = !empty($userData['admin']) ? 1 : 0;
 
         if ($userDataJson === false) {
@@ -216,7 +223,7 @@ HTML;
         // The public page preloads CSS before /bitrix/header.php so the
         // component's legacy Bootstrap does not override the portal template.
         // Keep a fallback for custom component placements.
-        if (!defined('KEYRIGHTS_CSS_PRELOADED')) {
+        if (($this->_params['CSS_PRELOADED'] ?? 'N') !== 'Y') {
             echo '<link rel="stylesheet" href="' . $staticPath . '/css/style.css?v=' . $assetVersion . '">';
         }
 
@@ -225,6 +232,34 @@ HTML;
         echo '<script defer src="' . $staticPath . '/js/libs/aes.js?v=' . $assetVersion . '"></script>';
         echo '<script defer src="' . $staticPath . '/js/libs/papaparse.js?v=' . $assetVersion . '"></script>';
         echo '<script defer src="' . $staticPath . '/js/bundle.js?v=' . $assetVersion . '"></script>';
+    }
+
+    private function getSafeBackUrl() {
+        $fallback = '/keyrights/';
+        $requestUri = isset($_SERVER['REQUEST_URI']) && is_string($_SERVER['REQUEST_URI'])
+            ? $_SERVER['REQUEST_URI']
+            : $fallback;
+        if (preg_match('/[\x00-\x1F\x7F]/', $requestUri)) {
+            return $fallback;
+        }
+        $parts = parse_url($requestUri);
+        if (!is_array($parts)
+            || isset($parts['scheme'])
+            || isset($parts['host'])
+            || isset($parts['user'])
+            || isset($parts['pass'])
+            || isset($parts['port'])
+        ) {
+            return $fallback;
+        }
+        $path = isset($parts['path']) && is_string($parts['path']) ? $parts['path'] : '';
+        if (preg_match('#^/keyrights(?:/|$)#', $path) !== 1) {
+            return $fallback;
+        }
+        $query = isset($parts['query']) && is_string($parts['query']) && $parts['query'] !== ''
+            ? '?' . $parts['query']
+            : '';
+        return $path . $query;
     }
 
     public static function getTranslations() {

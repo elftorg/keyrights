@@ -349,7 +349,6 @@ class Import {
 
             $tmpResult = $this->checkTimeLimit();
             if (is_array($tmpResult)) {
-                $tmpResult['s'] = $this->newSections;
                 return $tmpResult;
             }
 

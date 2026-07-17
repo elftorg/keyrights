@@ -906,6 +906,10 @@ class ApiController extends Controller {
             $historian = new History();
             $result = $historian->export($data);
 
+            if (is_array($result) && ($result['result'] ?? '') === 'error') {
+                $this->sendJsonError((string)($result['message'] ?? 'Некорректный диапазон дат'), 400);
+            }
+
             $this->sendJsonOk($result);
         } else {
             $this->sendJsonError('error');

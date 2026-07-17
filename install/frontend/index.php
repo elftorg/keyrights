@@ -53,8 +53,6 @@ $keyrightsCssVersion = is_file($keyrightsCssFile) ? (int)filemtime($keyrightsCss
     $keyrightsCss . ($keyrightsCssVersion ? '?v=' . $keyrightsCssVersion : '')
 );
 
-define('KEYRIGHTS_CSS_PRELOADED', true);
-
 require $_SERVER['DOCUMENT_ROOT'] . '/bitrix/header.php';
 
 global $APPLICATION;
@@ -66,6 +64,7 @@ $APPLICATION->IncludeComponent(
     [
         'SEF_MODE' => 'Y',
         'SEF_FOLDER' => '/keyrights/',
+        'CSS_PRELOADED' => 'Y',
     ],
     false
 );

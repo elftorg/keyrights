@@ -3,7 +3,6 @@ namespace Drdroid\Keyrights\Model;
 
 use Bitrix\Main\Config\Option;
 use CIBlockElement;
-use ConvertTimeStamp;
 
 class History {
     const WATCH = "watch";
@@ -63,10 +62,18 @@ class History {
             ];
         }
 
+        $dateRange = $this->parseDateRange($data);
+        if ($dateRange === null) {
+            return [
+                'result' => 'error',
+                'message' => 'Некорректный диапазон дат. Используйте формат ДД.ММ.ГГГГ',
+            ];
+        }
+
         $filter = [
             'IBLOCK_ID' => $this->iblockIdHistory,
-            '>=DATE_CREATE' => ConvertTimeStamp(strtotime($data['dateFrom']), "FULL"),
-            '<=DATE_CREATE' => ConvertTimeStamp(strtotime($data['dateUntil']) + 3600 * 24 - 1, "FULL"),
+            '>=DATE_CREATE' => ConvertTimeStamp($dateRange['from'], "FULL"),
+            '<=DATE_CREATE' => ConvertTimeStamp($dateRange['until'], "FULL"),
         ];
         $res = $this->ibe->GetList([], $filter, false, false, ['IBLOCK_ID', 'ID', 'DATE_CREATE', 'CREATED_BY', 'PROPERTY_ACTION', 'PROPERTY_ITEM_ID']);
 
@@ -119,5 +126,32 @@ class History {
         }
 
         return $result;
+    }
+
+    private function parseDateRange($data) {
+        if (!is_array($data)) {
+            return null;
+        }
+        $from = $this->parseDate($data['dateFrom'] ?? null, false);
+        $until = $this->parseDate($data['dateUntil'] ?? null, true);
+        if ($from === null || $until === null || $from > $until) {
+            return null;
+        }
+        return ['from' => $from, 'until' => $until];
+    }
+
+    private function parseDate($value, $endOfDay) {
+        if (!is_string($value) || preg_match('/^\d{2}\.\d{2}\.\d{4}$/D', $value) !== 1) {
+            return null;
+        }
+        $date = \DateTimeImmutable::createFromFormat('!d.m.Y', $value);
+        $errors = \DateTimeImmutable::getLastErrors();
+        if ($date === false || ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0))) {
+            return null;
+        }
+        if ($endOfDay) {
+            $date = $date->setTime(23, 59, 59);
+        }
+        return $date->getTimestamp();
     }
 }
